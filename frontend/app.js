@@ -10,6 +10,10 @@
   const joinBtn = $('btnJoin');
   const copyBtn = $('btnCopyLink');
   const roomsBtn = $('btnRooms');
+  const roomsPanel = $('roomsPanel');
+  const roomsList = $('roomsList');
+  const roomsRefresh = $('btnRoomsRefresh');
+  const roomsClose = $('btnRoomsClose');
   const statusEl = $('status');
 
   let ws = null;
@@ -77,14 +81,31 @@
             }
           }
         } else if (msg && msg.type === 'rooms') {
-          const lines = [];
-          lines.push(`Total users: ${msg.total || 0}`);
+          // Render rooms list panel
+          roomsList.innerHTML = '';
+          const total = document.createElement('li');
+          total.className = 'py-2 text-slate-400';
+          total.textContent = `Total users: ${msg.total || 0}`;
+          roomsList.appendChild(total);
           if (Array.isArray(msg.rooms)) {
             for (const r of msg.rooms) {
-              lines.push(`${r.roomId}: ${r.count}`);
+              const li = document.createElement('li');
+              li.className = 'py-2 flex items-center justify-between gap-2 cursor-pointer hover:bg-slate-800/50 px-2 rounded';
+              const left = document.createElement('div');
+              left.textContent = r.roomId;
+              const right = document.createElement('div');
+              right.className = 'text-slate-400 text-xs';
+              right.textContent = `${r.count}`;
+              li.appendChild(left);
+              li.appendChild(right);
+              li.addEventListener('click', () => {
+                roomEl.value = r.roomId;
+                roomsPanel.hidden = true;
+              });
+              roomsList.appendChild(li);
             }
           }
-          alert(lines.join('\n'));
+          roomsPanel.hidden = false;
         }
       } catch (_) {}
     };
@@ -111,6 +132,7 @@
     const url = new URL(window.location.href);
     url.searchParams.set('room', r);
     url.searchParams.set('alias', a);
+    url.searchParams.set('autojoin', '1');
     try {
       await navigator.clipboard.writeText(url.toString());
       copyBtn.textContent = 'Copied!';
@@ -126,6 +148,16 @@
     } else {
       alert('Connect first, then try again.');
     }
+  });
+
+  roomsRefresh.addEventListener('click', () => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ action: 'rooms' }));
+    }
+  });
+
+  roomsClose.addEventListener('click', () => {
+    roomsPanel.hidden = true;
   });
 
   sendBtn.addEventListener('click', () => {
@@ -147,7 +179,12 @@
     const params = new URLSearchParams(location.search);
     const r = params.get('room');
     const a = params.get('alias');
+    const auto = params.get('autojoin');
     if (r) roomEl.value = r;
     if (a) aliasEl.value = a;
+    if (r && a && auto === '1') {
+      // Auto-join if link includes autojoin
+      joinBtn.click();
+    }
   } catch (_) {}
 })();

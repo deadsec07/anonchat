@@ -36,9 +36,11 @@
               </label>
               <div class="flex gap-2">
                 <button id="btnJoin"
-                class="rounded-lg bg-emerald-400/90 hover:bg-emerald-400 text-emerald-950 font-semibold px-4 py-2 transition">Join</button>
-                <button id="btnCopyLink" class="rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-200 font-semibold px-4 py-2 border border-slate-700 transition">Copy link</button>
-                <button id="btnRooms" class="rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-200 font-semibold px-4 py-2 border border-slate-700 transition">Rooms</button>
+                  class="rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-semibold px-4 py-2 shadow transition ring-1 ring-emerald-400/20">Join</button>
+                <button id="btnCopyLink"
+                  class="rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-200 font-semibold px-4 py-2 border border-slate-600 transition">Copy link</button>
+                <button id="btnRooms"
+                  class="rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-200 font-semibold px-4 py-2 border border-slate-600 transition">Rooms</button>
               </div>
             </div>
           </div>
@@ -54,6 +56,18 @@
           <button id="send" class="rounded-full bg-emerald-400/90 hover:bg-emerald-400 text-emerald-950 font-semibold px-5 transition">Send</button>
         </div>
       </footer>
+    </div>
+
+    <!-- Rooms Panel -->
+    <div id="roomsPanel" hidden class="fixed right-4 top-16 z-20 w-72 rounded-xl border border-slate-800 bg-slate-900/95 shadow-2xl p-3">
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-sm text-slate-400">Active Rooms</div>
+        <div class="flex gap-2">
+          <button id="btnRoomsRefresh" class="text-xs rounded bg-slate-800/80 hover:bg-slate-800 border border-slate-700 px-2 py-1">Refresh</button>
+          <button id="btnRoomsClose" class="text-xs rounded bg-slate-800/80 hover:bg-slate-800 border border-slate-700 px-2 py-1">Close</button>
+        </div>
+      </div>
+      <ul id="roomsList" class="text-sm divide-y divide-slate-800"></ul>
     </div>
 
     <script src="config.js"></script>
