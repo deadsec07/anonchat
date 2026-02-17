@@ -119,7 +119,7 @@ aws s3 cp frontend/index.html s3://<WebsiteBucketName>/index.html --cache-contro
 
 ## GitHub Actions
 
-- Infra CDK Deploy: deploys the infra on pushes to `main` or manual dispatch.
-- Frontend Deploy: discovers the stack outputs (WebSocket URL + Website bucket), generates `frontend/config.js` automatically, and syncs the site to S3. No extra secrets required beyond AWS creds.
+- Infra CDK Deploy: runs only when a PR into `main` is merged.
+- Frontend Deploy: runs only when a PR into `main` is merged; discovers the stack outputs (WebSocket URL + Website bucket), generates `frontend/config.js` automatically, and syncs the site to S3. No extra secrets required beyond AWS creds.
 
 Resources are tagged (`Project=anonchat`) and prefixed with `anonchat` to reduce confusion in accounts with other infra.

@@ -1,26 +1,20 @@
 name: Infra CDK Deploy
 
 on:
-  workflow_dispatch:
-    inputs:
-      region:
-        description: AWS region
-        required: false
-        default: us-east-1
-  push:
+  pull_request:
+    types: [closed]
     branches: [ "main" ]
-    paths:
-      - "infra-cdk/**"
-      - "backend/**"
 
 jobs:
   deploy:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
     env:
       AWS_REGION: ${{ github.event.inputs.region || 'us-east-1' }}
+      AWS_ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_TO_ASSUME }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
