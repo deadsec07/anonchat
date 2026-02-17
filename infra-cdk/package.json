@@ -1,5 +1,5 @@
 {
-  "name": "anon-chat-infra",
+  "name": "anonchat-infra",
   "version": "0.1.0",
   "private": true,
   "bin": {
@@ -16,4 +16,3 @@
     "constructs": "^10.3.0"
   }
 }
-
