@@ -34,8 +34,12 @@
                 <input id="alias" placeholder="anon" maxlength="32"
                   class="w-full rounded-lg bg-slate-800/80 border border-slate-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
               </label>
-              <button id="btnJoin"
+              <div class="flex gap-2">
+                <button id="btnJoin"
                 class="rounded-lg bg-emerald-400/90 hover:bg-emerald-400 text-emerald-950 font-semibold px-4 py-2 transition">Join</button>
+                <button id="btnCopyLink" class="rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-200 font-semibold px-4 py-2 border border-slate-700 transition">Copy link</button>
+                <button id="btnRooms" class="rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-200 font-semibold px-4 py-2 border border-slate-700 transition">Rooms</button>
+              </div>
             </div>
           </div>
 
@@ -45,7 +49,7 @@
 
       <footer id="composer" hidden class="sticky bottom-0 border-t border-slate-800 bg-slate-900/70 backdrop-blur">
         <div class="max-w-4xl mx-auto px-4 py-3 flex gap-2">
-          <input id="input" placeholder="Type a message" maxlength="500"
+          <input id="input" placeholder="Type a message" maxlength="512"
             class="flex-1 rounded-full bg-slate-800/80 border border-slate-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
           <button id="send" class="rounded-full bg-emerald-400/90 hover:bg-emerald-400 text-emerald-950 font-semibold px-5 transition">Send</button>
         </div>

@@ -11,9 +11,25 @@ exports.handler = async (event) => {
   } catch (_) {}
 
   const roomId = (body.roomId || '').toString().trim().slice(0, 64) || 'lobby';
-  const alias = (body.alias || '').toString().trim().slice(0, 32) || 'anon';
+  let alias = (body.alias || '').toString().trim().slice(0, 32) || 'anon';
 
   try {
+    // Enforce alias uniqueness within the room (best-effort)
+    const existing = await listConnectionsByRoom(roomId);
+    const used = new Set((existing || []).map((x) => (x.alias || '').toString()));
+    if (used.has(alias)) {
+      const base = alias;
+      for (let i = 2; i < 1000; i++) {
+        const suffix = `-${i}`;
+        const maxBase = 32 - suffix.length;
+        const candidate = (base.slice(0, Math.max(1, maxBase)) + suffix).slice(0, 32);
+        if (!used.has(candidate)) {
+          alias = candidate;
+          break;
+        }
+      }
+    }
+
     const me = await setRoomAndAlias(connectionId, roomId, alias);
     const recipients = await listConnectionsByRoom(roomId);
 
@@ -25,6 +41,7 @@ exports.handler = async (event) => {
         event: 'join',
         roomId,
         text: `${alias} joined`,
+        count: (recipients || []).length,
         ts: Date.now(),
       },
       deleteConnection
@@ -39,4 +56,3 @@ exports.handler = async (event) => {
     return { statusCode: 500, body: 'Failed to join' };
   }
 };
-

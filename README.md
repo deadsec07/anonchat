@@ -117,6 +117,13 @@ aws s3 cp frontend/index.html s3://<WebsiteBucketName>/index.html --cache-contro
 - This stack stores minimal state to keep costs low. Additions like persistence or moderation can be layered on with care.
 - If you need LocalStack integration for WebSockets, note that community edition may not emulate API Gateway WebSocket; the provided local WS server is recommended for UI iteration.
 
+### Cost guardrails implemented
+
+- Lambda reserved concurrency capped at 10 per function to prevent runaway costs.
+- CloudWatch Logs retention set to 1 week for all Lambdas.
+- Basic per-connection rate limiting (30 msgs/min) with polite client notice.
+- Presence count broadcast on join/leave; frontend shows online count.
+
 ## GitHub Actions
 
 - Infra CDK Deploy: runs only when a PR into `main` is merged.

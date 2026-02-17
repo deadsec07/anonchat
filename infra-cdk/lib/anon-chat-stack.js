@@ -4,6 +4,7 @@ const { Stack, CfnOutput, Tags, Duration } = cdk;
 const dynamodb = require('aws-cdk-lib/aws-dynamodb');
 const lambda = require('aws-cdk-lib/aws-lambda');
 const apigwv2 = require('aws-cdk-lib/aws-apigatewayv2');
+const logs = require('aws-cdk-lib/aws-logs');
 
 class AnonChatStack extends Stack {
   constructor(scope, id, props = {}) {
@@ -40,6 +41,8 @@ class AnonChatStack extends Stack {
         code: lambda.Code.fromAsset(codePath),
         memorySize: 128,
         timeout: Duration.seconds(10),
+        reservedConcurrentExecutions: 10,
+        logRetention: logs.RetentionDays.ONE_WEEK,
         environment: { TABLE_NAME: table.tableName },
       });
       table.grantReadWriteData(fn);
@@ -50,6 +53,7 @@ class AnonChatStack extends Stack {
     const disconnectFn = makeFn('disconnect', 'handlers/disconnect');
     const joinFn = makeFn('join', 'handlers/join');
     const sendFn = makeFn('send', 'handlers/send');
+    const roomsFn = makeFn('rooms', 'handlers/rooms');
 
     // WebSocket API (low-level Cfn resources to avoid alpha modules)
     const api = new apigwv2.CfnApi(this, 'WsApi', {
@@ -94,6 +98,13 @@ class AnonChatStack extends Stack {
       integrationMethod: 'POST',
     });
 
+    const roomsInt = new apigwv2.CfnIntegration(this, 'RoomsIntegration', {
+      apiId: api.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: integrationUri(roomsFn),
+      integrationMethod: 'POST',
+    });
+
     const connectRoute = new apigwv2.CfnRoute(this, 'RouteConnect', {
       apiId: api.ref,
       routeKey: '$connect',
@@ -119,6 +130,13 @@ class AnonChatStack extends Stack {
       target: `integrations/${sendInt.ref}`,
     });
 
+    const roomsRoute = new apigwv2.CfnRoute(this, 'RouteRooms', {
+      apiId: api.ref,
+      routeKey: 'rooms',
+      authorizationType: 'NONE',
+      target: `integrations/${roomsInt.ref}`,
+    });
+
     // Allow API Gateway to invoke Lambdas
     const sourceArn = `arn:aws:execute-api:${this.region}:${this.account}:${api.ref}/*`;
     [
@@ -126,6 +144,7 @@ class AnonChatStack extends Stack {
       { id: 'PermDisconnect', fn: disconnectFn },
       { id: 'PermJoin', fn: joinFn },
       { id: 'PermSend', fn: sendFn },
+      { id: 'PermRooms', fn: roomsFn },
     ].forEach(({ id, fn }) => {
       new lambda.CfnPermission(this, id, {
         action: 'lambda:InvokeFunction',
@@ -136,8 +155,8 @@ class AnonChatStack extends Stack {
     });
 
     // Ensure deployment order
-    [connectInt, disconnectInt, joinInt, sendInt].forEach((intg) => intg.addDependency(stage));
-    [connectRoute, disconnectRoute, joinRoute, sendRoute].forEach((r) => r.addDependency(stage));
+    [connectInt, disconnectInt, joinInt, sendInt, roomsInt].forEach((intg) => intg.addDependency(stage));
+    [connectRoute, disconnectRoute, joinRoute, sendRoute, roomsRoute].forEach((r) => r.addDependency(stage));
 
     new CfnOutput(this, 'WebSocketUrl', {
       value: `wss://${api.ref}.execute-api.${this.region}.amazonaws.com/$default`,

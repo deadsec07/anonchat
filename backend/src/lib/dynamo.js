@@ -66,3 +66,42 @@ module.exports = {
   listConnectionsByRoom,
 };
 
+// Simple per-connection rate limiter using attributes on the connection item.
+// Windowed counter: resets every `windowSec`, allows up to `limit` messages.
+async function rateLimitCheck(connectionId, { limit = 30, windowSec = 60 } = {}) {
+  const now = Math.floor(Date.now() / 1000);
+  const newResetAt = now + windowSec;
+  // Try to reset window if expired or not set
+  try {
+    await dynamo
+      .update({
+        TableName: TABLE_NAME,
+        Key: { connectionId },
+        UpdateExpression: 'SET rlResetAt = :r, rlCount = :one',
+        ConditionExpression: 'attribute_not_exists(rlResetAt) OR rlResetAt < :now',
+        ExpressionAttributeValues: { ':r': newResetAt, ':one': 1, ':now': now },
+        ReturnValues: 'UPDATED_NEW',
+      })
+      .promise();
+    return { allowed: true, remaining: Math.max(0, limit - 1), resetAt: newResetAt };
+  } catch (err) {
+    if (err.code !== 'ConditionalCheckFailedException') throw err;
+  }
+
+  // Same window: increment count
+  const res = await dynamo
+    .update({
+      TableName: TABLE_NAME,
+      Key: { connectionId },
+      UpdateExpression: 'ADD rlCount :one',
+      ExpressionAttributeValues: { ':one': 1 },
+      ReturnValues: 'ALL_NEW',
+    })
+    .promise();
+
+  const count = (res.Attributes && res.Attributes.rlCount) || 0;
+  const resetAt = (res.Attributes && res.Attributes.rlResetAt) || newResetAt;
+  return { allowed: count <= limit, remaining: Math.max(0, limit - count), resetAt };
+}
+
+module.exports.rateLimitCheck = rateLimitCheck;
