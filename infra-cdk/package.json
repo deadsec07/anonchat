@@ -1,0 +1,19 @@
+{
+  "name": "anon-chat-infra",
+  "version": "0.1.0",
+  "private": true,
+  "bin": {
+    "anon-chat-cdk": "bin/anon-chat.js"
+  },
+  "scripts": {
+    "synth": "cdk synth",
+    "deploy": "cdk deploy",
+    "destroy": "cdk destroy",
+    "cdk": "cdk"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.137.0",
+    "constructs": "^10.3.0"
+  }
+}
+

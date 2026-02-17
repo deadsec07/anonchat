@@ -1,0 +1,66 @@
+name: Frontend Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      region:
+        description: AWS region
+        required: false
+        default: us-east-1
+  push:
+    branches: [ "main" ]
+    paths:
+      - "frontend/**"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_REGION: ${{ github.event.inputs.region || 'us-east-1' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC Assume Role)
+        if: ${{ env.AWS_ROLE_TO_ASSUME != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS credentials (Access Keys)
+        if: ${{ env.AWS_ROLE_TO_ASSUME == '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Discover infra outputs
+        id: cf
+        run: |
+          ws_url=$(aws cloudformation describe-stacks --stack-name anonchat \
+            --query "Stacks[0].Outputs[?OutputKey=='WebSocketUrl'].OutputValue" --output text)
+          bucket=$(aws cloudformation describe-stacks --stack-name anonchat \
+            --query "Stacks[0].Outputs[?OutputKey=='WebsiteBucketName'].OutputValue" --output text)
+          echo "ws_url=$ws_url" >> $GITHUB_OUTPUT
+          echo "bucket=$bucket" >> $GITHUB_OUTPUT
+
+      - name: Generate config.js
+        run: |
+          echo "window.CONFIG = { wsUrl: '${{ steps.cf.outputs.ws_url }}' };" > frontend/config.js
+
+      - name: Sync static assets (cacheable)
+        run: |
+          aws s3 sync frontend s3://${{ steps.cf.outputs.bucket }}/ \
+            --delete \
+            --exclude index.html \
+            --cache-control max-age=31536000,public
+
+      - name: Upload index.html (no cache)
+        run: |
+          aws s3 cp frontend/index.html s3://${{ steps.cf.outputs.bucket }}/index.html \
+            --cache-control no-store

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0f172a" />
+    <title>Anon Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="bg-slate-900 text-slate-100 min-h-screen">
+    <div class="flex flex-col min-h-screen">
+      <header class="sticky top-0 z-10 backdrop-blur bg-slate-900/70 border-b border-slate-800">
+        <div class="max-w-4xl mx-auto flex items-center justify-between gap-4 px-4 py-3">
+          <div class="flex items-center gap-2">
+            <div class="h-6 w-6 rounded bg-gradient-to-tr from-emerald-400 to-cyan-400"></div>
+            <h1 class="font-semibold tracking-tight">Anon Chat</h1>
+          </div>
+          <div id="status" class="text-xs text-slate-400">disconnected</div>
+        </div>
+      </header>
+
+      <main class="flex-1">
+        <div class="max-w-4xl mx-auto px-4 py-4 flex flex-col gap-4">
+          <div id="join" class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-xl">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+              <label class="text-sm">
+                <div class="mb-1 text-slate-400">Room</div>
+                <input id="room" placeholder="lobby" maxlength="64"
+                  class="w-full rounded-lg bg-slate-800/80 border border-slate-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+              </label>
+              <label class="text-sm">
+                <div class="mb-1 text-slate-400">Alias</div>
+                <input id="alias" placeholder="anon" maxlength="32"
+                  class="w-full rounded-lg bg-slate-800/80 border border-slate-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+              </label>
+              <button id="btnJoin"
+                class="rounded-lg bg-emerald-400/90 hover:bg-emerald-400 text-emerald-950 font-semibold px-4 py-2 transition">Join</button>
+            </div>
+          </div>
+
+          <ul id="messages" class="flex flex-col gap-3 overflow-y-auto min-h-[50vh]"></ul>
+        </div>
+      </main>
+
+      <footer id="composer" hidden class="sticky bottom-0 border-t border-slate-800 bg-slate-900/70 backdrop-blur">
+        <div class="max-w-4xl mx-auto px-4 py-3 flex gap-2">
+          <input id="input" placeholder="Type a message" maxlength="500"
+            class="flex-1 rounded-full bg-slate-800/80 border border-slate-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+          <button id="send" class="rounded-full bg-emerald-400/90 hover:bg-emerald-400 text-emerald-950 font-semibold px-5 transition">Send</button>
+        </div>
+      </footer>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+  </html>

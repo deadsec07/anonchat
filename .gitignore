@@ -1,0 +1,21 @@
+# Node / general
+node_modules/
+.DS_Store
+dist/
+.env
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# SAM/Deploy artifacts
+.aws-sam/
+.terraform/
+.serverless/
+
+# Local config
+frontend/config.js
+local/*.data
+
+# CDK
+infra-cdk/cdk.out/
+infra-cdk/node_modules/
