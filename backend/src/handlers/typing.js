@@ -13,6 +13,9 @@ exports.handler = async (event) => {
   try {
     const me = await getConnection(connectionId);
     if (!me || !me.roomId) return { statusCode: 200, body: 'noop' };
+    const { rateLimitCheck } = require('../lib/dynamo');
+    const rl = await rateLimitCheck(connectionId, { limit: 60, windowSec: 60 });
+    if (!rl.allowed) return { statusCode: 200, body: 'noop' };
     // DM-only typing: require a recipient alias in same room
     if (!to) return { statusCode: 200, body: 'noop' };
     const all = await listConnectionsByRoom(me.roomId);

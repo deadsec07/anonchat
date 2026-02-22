@@ -46,7 +46,7 @@ jobs:
 
       - name: Generate config.js
         run: |
-          echo "window.CONFIG = { wsUrl: '${{ steps.cf.outputs.ws_url }}' };" > frontend/config.js
+          echo "window.CONFIG = { wsUrl: '${{ steps.cf.outputs.ws_url }}', vapidPublicKey: '${{ secrets.VAPID_PUBLIC_KEY }}' };" > frontend/config.js
 
       - name: Sync static assets (cacheable)
         run: |

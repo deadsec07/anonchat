@@ -48,6 +48,15 @@ async function setRoomAndAlias(connectionId, roomId, alias, extra = {}) {
     update += ', roomCode = :c';
     values[':c'] = (extra.roomCode + '').slice(0, 32);
   }
+  if (extra.roomCodeSalt && extra.roomCodeHash) {
+    update += ', roomCodeSalt = :s, roomCodeHash = :h';
+    values[':s'] = String(extra.roomCodeSalt);
+    values[':h'] = String(extra.roomCodeHash);
+  }
+  if (extra.pushSub) {
+    update += ', pushSub = :ps';
+    values[':ps'] = extra.pushSub;
+  }
   const params = {
     TableName: TABLE_NAME,
     Key: { connectionId },

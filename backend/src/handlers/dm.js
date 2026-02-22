@@ -24,6 +24,12 @@ exports.handler = async (event) => {
   try {
     const me = await getConnection(connectionId);
     if (!me || !me.roomId) return { statusCode: 400, body: 'Join a room first' };
+    const { rateLimitCheck } = require('../lib/dynamo');
+    const rl = await rateLimitCheck(connectionId, { limit: 20, windowSec: 60 });
+    if (!rl.allowed) {
+      await broadcast(event, [{ connectionId }], { type: 'system', event: 'rate_limited', roomId: me.roomId, text: 'Too many DMs; slow down', ts: Date.now() });
+      return { statusCode: 429, body: 'Rate limited' };
+    }
 
     if (to && to === (me.alias || '')) {
       // Inform only the sender: cannot DM yourself
@@ -65,6 +71,20 @@ exports.handler = async (event) => {
 
     // include sender so they see their own DM
     await broadcast(event, [...recipients, { connectionId }], payload, deleteConnection);
+    // Best-effort push notify for recipients
+    try {
+      const pub = process.env.VAPID_PUBLIC_KEY;
+      const priv = process.env.VAPID_PRIVATE_KEY;
+      const sub = process.env.VAPID_SUBJECT || 'mailto:admin@example.com';
+      if (pub && priv) {
+        const { sendNoPayload } = require('../lib/webpush');
+        await Promise.allSettled((recipients || []).map((r) => {
+          const s = r && r.pushSub;
+          if (!s || !s.endpoint) return Promise.resolve();
+          return sendNoPayload(s, { publicKey: pub, privateKey: priv, subject: sub });
+        }));
+      }
+    } catch (e) { console.error('push send error', e); }
     return { statusCode: 200, body: JSON.stringify({ ok: true }) };
   } catch (err) {
     console.error('dm error', err);

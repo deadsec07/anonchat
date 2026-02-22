@@ -14,6 +14,7 @@
   const roomsHdrBtn = $('btnRoomsHdr');
   const usersHdrBtn = document.getElementById('btnUsersHdr');
   const btnJoinLobbyHdr = document.getElementById('btnJoinLobby');
+  const btnRoomSettings = document.getElementById('btnRoomSettings');
   const roomsPanel = $('roomsPanel');
   const roomsList = $('roomsList');
   const roomsRefresh = $('btnRoomsRefresh');
@@ -35,6 +36,8 @@
   const dmInput = document.getElementById('dmInput');
   const dmSend = document.getElementById('btnDmSend');
   const dmThreadBack = document.getElementById('btnDmThreadBack');
+  const dmEncryptToggle = document.getElementById('dmEncryptToggle');
+  const btnDmSetKey = document.getElementById('btnDmSetKey');
   const btnAttach = document.getElementById('btnAttach');
   const fileAttach = document.getElementById('fileAttach');
   const attachPreview = document.getElementById('attachPreview');
@@ -76,11 +79,13 @@
   const statusEl = $('status');
   const loginError = $('loginError');
   const currentRoomEl = $('currentRoom');
+  const landingEl = document.getElementById('landing');
   const aliasOverlay = document.getElementById('aliasOverlay');
   const newAliasInput = document.getElementById('newAliasInput');
   const btnAliasSave = document.getElementById('btnAliasSave');
   const btnAliasCancel = document.getElementById('btnAliasCancel');
   const aliasError = document.getElementById('aliasError');
+  
   let myRoomCode = '';
   let myAliasServer = '';
 
@@ -108,6 +113,7 @@
   let pendingDmAttachment = null;
   let lastAttachFile = null;
   let lastDmAttachFile = null;
+  const dmKeys = new Map(); // alias -> CryptoKey
 
   function setDmTarget(name) {
     dmTarget = name || null;
@@ -247,6 +253,8 @@
       dmUnread.set(name, 0);
       updateDmsButton();
     }
+    // reflect encryption toggle for this partner
+    if (dmEncryptToggle) dmEncryptToggle.checked = !!dmKeys.get(name);
   }
 
   function hideDmThread() {
@@ -374,7 +382,40 @@
   function hideApp() {
     if (appShell) { appShell.hidden = true; appShell.style.display = 'none'; }
   }
+  function showLanding() {
+    if (landingEl) { landingEl.hidden = false; landingEl.style.display = ''; }
+  }
+  function hideLanding() {
+    if (landingEl) { landingEl.hidden = true; landingEl.style.display = 'none'; }
+  }
 
+  // PWA: register service worker and setup push if VAPID key is provided
+  async function setupPwaAndPush() {
+    try {
+      if ('serviceWorker' in navigator) {
+        await navigator.serviceWorker.register('./sw.js');
+      }
+      const vapid = window.CONFIG && window.CONFIG.vapidPublicKey;
+      if (!vapid || !('PushManager' in window) || !navigator.serviceWorker) return;
+      const reg = await navigator.serviceWorker.ready;
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') return;
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapid) });
+      // send subscription to server
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ action: 'push_subscribe', subscription: sub }));
+      }
+    } catch (_) {}
+  }
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) { outputArray[i] = rawData.charCodeAt(i); }
+    return outputArray;
+  }
   async function copyTextToClipboard(text) {
     try {
       if (navigator.clipboard && window.isSecureContext) {
@@ -439,12 +480,15 @@
       // Hide the button entirely when already in lobby
       btnJoinLobbyHdr.hidden = true;
       btnJoinLobbyHdr.style.display = 'none';
+      // Hide room settings in lobby
+      if (btnRoomSettings) { btnRoomSettings.hidden = true; btnRoomSettings.style.display = 'none'; }
     } else {
       btnJoinLobbyHdr.hidden = false;
       btnJoinLobbyHdr.style.display = '';
       btnJoinLobbyHdr.textContent = 'Join Lobby';
       btnJoinLobbyHdr.disabled = false;
       btnJoinLobbyHdr.classList.remove('opacity-60','cursor-not-allowed');
+      if (btnRoomSettings) { btnRoomSettings.hidden = false; btnRoomSettings.style.display = ''; }
     }
   }
 
@@ -636,9 +680,13 @@
     ws.onopen = () => {
       setStatus('connected', '#22c55e');
       hideOverlay();
+      hideLanding();
       showApp();
-      ws.send(JSON.stringify({ action: 'join', roomId: room, alias, clientId: getClientId(), code: myRoomCode || undefined, quiet: window.__quietJoin === true }));
-      window.__quietJoin = false;
+      // Initial connect: quiet only if this tab has joined before (reload scenario)
+      let isReload = false;
+      try { isReload = sessionStorage.getItem('ac:firstJoinDone') === '1'; } catch (_) {}
+      ws.send(JSON.stringify({ action: 'join', roomId: room, alias, clientId: getClientId(), code: myRoomCode || undefined, quiet: !!isReload }));
+      try { sessionStorage.setItem('ac:firstJoinDone', '1'); } catch (_) {}
       joined = true;
       joinEl.hidden = true;
       composerEl.hidden = false;
@@ -657,6 +705,7 @@
       scrollToBottom(true);
       // Seed users for mentions/DMs
       requestUsers();
+      setupPwaAndPush();
     };
     ws.onclose = () => {
       setStatus('disconnected', '#ef4444');
@@ -673,7 +722,7 @@
       updateLobbyButton();
     };
     ws.onerror = () => setStatus('error', '#ef4444');
-    ws.onmessage = (ev) => {
+    ws.onmessage = async (ev) => {
       try {
         const msg = JSON.parse(ev.data);
         if (msg && (msg.type === 'message' || msg.type === 'system')) {
@@ -682,6 +731,12 @@
           const mine = myAliasWithSuffix();
           const partner = (String(msg.alias || '') === mine) ? String(msg.to || '') : String(msg.alias || '');
           if (partner) {
+            // E2E decrypt when available
+            if (msg.enc && dmKeys.get(partner)) {
+              try { msg.text = await decryptText(dmKeys.get(partner), msg.enc); } catch (_) { msg.text = '[encrypted]'; }
+            } else if (msg.enc) {
+              msg.text = '[encrypted]';
+            }
             const thread = ensureThread(partner);
             thread.push(msg);
             if (dmTarget && partner === dmTarget && dmThreadPanel && !dmThreadPanel.hidden) {
@@ -841,13 +896,6 @@
       handlePresign(msg);
     }
       } catch (_) {}
-      // Handle invalid room code prompt when already logged in
-      if (msg && msg.type === 'system' && msg.event === 'error' && /Invalid room code/i.test(String(msg.text || ''))) {
-        if (joined) {
-          if (roomCodeOverlay) { roomCodeOverlay.hidden = false; roomCodeOverlay.style.display = ''; }
-          if (roomJoinCodeInput) { roomJoinCodeInput.value = ''; try { roomJoinCodeInput.focus(); } catch (_) {} }
-        }
-      }
     };
   }
 
@@ -888,6 +936,32 @@
       fr.onload = () => resolve(String(fr.result || ''));
       fr.onerror = reject;
       fr.readAsDataURL(file);
+    });
+  }
+
+  async function downscaleImage(file, maxDim = 1024, quality = 0.85) {
+    return new Promise((resolve, reject) => {
+      try {
+        const img = new Image();
+        img.onload = () => {
+          let { width, height } = img;
+          const scale = Math.min(1, maxDim / Math.max(width, height));
+          const w = Math.max(1, Math.round(width * scale));
+          const h = Math.max(1, Math.round(height * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          canvas.toBlob((blob) => {
+            if (!blob) return reject(new Error('toBlob failed'));
+            const out = new File([blob], file.name.replace(/\.(png|jpg|jpeg|webp)$/i, '.jpg'), { type: 'image/jpeg' });
+            resolve(out);
+          }, 'image/jpeg', quality);
+        };
+        img.onerror = reject;
+        const url = URL.createObjectURL(file);
+        img.src = url;
+      } catch (e) { reject(e); }
     });
   }
 
@@ -1165,6 +1239,45 @@
       if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ action: 'rooms' }));
     });
   }
+  function openLoginModalViaNav() {
+    try { history.pushState({ view: 'login' }, '', '#join'); } catch (_) {}
+    hideLanding();
+    showOverlay();
+  }
+  const btnChatNow = document.getElementById('btnChatNow');
+  if (btnChatNow) btnChatNow.addEventListener('click', openLoginModalViaNav);
+  const btnChatNowNav = document.getElementById('btnChatNowNav');
+  if (btnChatNowNav) btnChatNowNav.addEventListener('click', openLoginModalViaNav);
+
+  // Handle browser back/forward to toggle landing/login views
+  window.addEventListener('popstate', () => {
+    const st = history.state || {};
+    if (st.view === 'login') { hideLanding(); showOverlay(); return; }
+    // default to landing when not explicitly in login
+    showLanding(); hideOverlay();
+  });
+
+  // Seed initial history state
+  try {
+    const st = history.state || {};
+    if (!st || !st.view) {
+      history.replaceState({ view: 'landing' }, '', location.pathname + location.search);
+    }
+  } catch (_) {}
+  if (btnRoomSettings) btnRoomSettings.addEventListener('click', () => {
+    if (roomSettingsOverlay) { roomSettingsOverlay.hidden = false; roomSettingsOverlay.style.display = ''; }
+    if (roomNewCode) { roomNewCode.value=''; try { roomNewCode.focus(); } catch (_) {} }
+  });
+  if (btnRoomSettingsClose) btnRoomSettingsClose.addEventListener('click', () => {
+    if (roomSettingsOverlay) { roomSettingsOverlay.hidden = true; roomSettingsOverlay.style.display = 'none'; }
+  });
+  if (btnRotateCode) btnRotateCode.addEventListener('click', () => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const code = (roomNewCode && roomNewCode.value || '').toString().trim().slice(0,32);
+    if (!code) return;
+    ws.send(JSON.stringify({ action: 'set_code', code }));
+    if (roomSettingsOverlay) { roomSettingsOverlay.hidden = true; roomSettingsOverlay.style.display = 'none'; }
+  });
 
   if (roomsClose) {
     roomsClose.addEventListener('click', () => {
@@ -1180,6 +1293,62 @@
   if (dmThreadClose) dmThreadClose.addEventListener('click', () => { hideDmThread(); });
   if (dmThreadBack) dmThreadBack.addEventListener('click', () => { hideDmThread(); openDmsPanel(); });
   if (dmThreadSelect) dmThreadSelect.addEventListener('change', () => { const v = dmThreadSelect.value; if (v) { setDmTarget(v); openDmThread(v); } });
+  if (btnDmSetKey) btnDmSetKey.addEventListener('click', async () => {
+    const partner = dmTarget || (dmThreadSelect && dmThreadSelect.value) || '';
+    const pass = prompt(`Set shared secret with ${partner}`);
+    if (pass == null) return;
+    if (!partner) return;
+    const key = await deriveKey(pass);
+    dmKeys.set(partner, key);
+    try { localStorage.setItem(`ac:dmkey:${partner}`, pass); } catch (_) {}
+    if (dmEncryptToggle) dmEncryptToggle.checked = true;
+  });
+  if (dmEncryptToggle) dmEncryptToggle.addEventListener('change', async () => {
+    const on = !!dmEncryptToggle.checked;
+    const partner = dmTarget || (dmThreadSelect && dmThreadSelect.value) || '';
+    if (!partner) { dmEncryptToggle.checked = false; return; }
+    if (!on) { dmKeys.delete(partner); try { localStorage.removeItem(`ac:dmkey:${partner}`); } catch (_) {} return; }
+    let pass = null;
+    try { pass = localStorage.getItem(`ac:dmkey:${partner}`) || null; } catch (_) {}
+    if (!pass) pass = prompt(`Enter shared secret with ${partner}`) || '';
+    if (!pass) { dmEncryptToggle.checked = false; return; }
+    const key = await deriveKey(pass);
+    dmKeys.set(partner, key);
+  });
+
+  // Load any saved DM keys
+  try {
+    const items = Object.keys(localStorage).filter((k) => k.startsWith('ac:dmkey:'));
+    for (const k of items) {
+      const partner = k.replace('ac:dmkey:','');
+      const pass = localStorage.getItem(k);
+      if (pass) {
+        deriveKey(pass).then((key) => { dmKeys.set(partner, key); }).catch(() => {});
+      }
+    }
+  } catch (_) {}
+
+  async function deriveKey(pass) {
+    const enc = new TextEncoder();
+    const baseKey = await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveKey']);
+    const salt = enc.encode('anonchat-dm');
+    return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' }, baseKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  }
+  async function encryptText(key, plain) {
+    const enc = new TextEncoder();
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plain));
+    return { c: b64(new Uint8Array(ct)), iv: b64(iv) };
+  }
+  async function decryptText(key, payload) {
+    const dec = new TextDecoder();
+    const iv = ub64(payload.iv);
+    const data = ub64(payload.c);
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+    return dec.decode(pt);
+  }
+  function b64(buf) { return btoa(String.fromCharCode(...buf)); }
+  function ub64(s) { const bin = atob(s); const buf = new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) buf[i]=bin.charCodeAt(i); return buf; }
   // Presign + upload flow: handle WS reply and upload file
   function handlePresign(msg) {
     try {
@@ -1242,9 +1411,10 @@
   if (btnAttach) btnAttach.addEventListener('click', () => { if (fileAttach) fileAttach.click(); });
   if (fileAttach) fileAttach.addEventListener('change', async () => {
     try {
-      const file = fileAttach.files && fileAttach.files[0];
+      let file = fileAttach.files && fileAttach.files[0];
       if (!file) return;
       if (!/^image\//.test(file.type)) { alert('Only images are supported for now.'); fileAttach.value=''; return; }
+      try { file = await downscaleImage(file, 1024, 0.85); } catch (_) {}
       lastAttachFile = file;
       showAttachPreviewUI(file, false);
       if (isLocalWs()) {
@@ -1266,9 +1436,10 @@
   if (btnDmAttach) btnDmAttach.addEventListener('click', () => { if (dmFileAttach) dmFileAttach.click(); });
   if (dmFileAttach) dmFileAttach.addEventListener('change', async () => {
     try {
-      const file = dmFileAttach.files && dmFileAttach.files[0];
+      let file = dmFileAttach.files && dmFileAttach.files[0];
       if (!file) return;
       if (!/^image\//.test(file.type)) { alert('Only images are supported for now.'); dmFileAttach.value=''; return; }
+      try { file = await downscaleImage(file, 1024, 0.85); } catch (_) {}
       lastDmAttachFile = file;
       showAttachPreviewUI(file, true);
       if (isLocalWs()) {
@@ -1322,7 +1493,7 @@
     });
   }
 
-  sendBtn.addEventListener('click', () => {
+  sendBtn.addEventListener('click', async () => {
     const text = inputEl.value.trim();
     if ((!text && !pendingAttachment) || !ws || ws.readyState !== WebSocket.OPEN) return;
     if (text.length > 512) return;
@@ -1334,7 +1505,11 @@
         setDmTarget(null);
         return;
       }
-      const payload = { action: 'dm', to: dmTarget, text };
+      let payload = { action: 'dm', to: dmTarget, text };
+      const key = dmKeys.get(dmTarget);
+      if (key && text) {
+        try { const e = await encryptText(key, text); payload = { action: 'dm', to: dmTarget, enc: e, text: '' }; } catch (_) {}
+      }
       if (pendingDmAttachment) payload.attachment = pendingDmAttachment;
       ws.send(JSON.stringify(payload));
       // stop typing indicator for DM after sending
@@ -1415,11 +1590,13 @@
       window.__quietJoin = true;
       doLogin();
     } else {
-      showOverlay();
+      showLanding();
     }
   } catch (_) {}
   // Strongly enforce initial hidden state for banners and DM panels
   hideComposerBanners();
   hideDmThread();
   hideDmsPanel();
+  // Show landing by default if overlay not shown yet
+  if (!(window.__quietJoin)) showLanding();
 })();

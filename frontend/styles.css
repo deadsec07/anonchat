@@ -44,6 +44,26 @@ ul#messages li.dm .meta { color: rgb(245, 208, 66); }
 /* Generic disabled button look */
 button:disabled { opacity: .55; cursor: not-allowed; }
 
+/* Prominent pulse for primary actions (Chat now) */
+@keyframes btnGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(16,185,129,0.0), 0 1px 6px rgba(0,0,0,.15);
+    filter: brightness(1);
+  }
+  50% {
+    box-shadow: 0 0 28px 8px rgba(16,185,129,0.55), 0 2px 12px rgba(0,0,0,.2);
+    filter: brightness(1.03);
+  }
+}
+@keyframes btnBgPulse {
+  0%, 100% { background-color: #ffffff; }
+  50% { background-color: #d1fae5; /* emerald-100 tint */ }
+}
+.btn-attn {
+  animation: btnBgPulse 1.8s ease-in-out infinite, btnGlow 1.6s ease-in-out infinite;
+}
+.btn-attn::before { display: none; }
+
 /* DMs button attention pulse when unread */
 @keyframes dmPulse {
   0%, 100% { background-color: rgba(16,185,129,.18); box-shadow: 0 0 0 0 rgba(16,185,129,.32); }

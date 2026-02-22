@@ -21,6 +21,9 @@ exports.handler = async (event) => {
 
   try {
     const me = await getConnection(connectionId);
+    const { rateLimitCheck } = require('../lib/dynamo');
+    const rl = await rateLimitCheck(connectionId, { limit: 10, windowSec: 60 });
+    if (!rl.allowed) return { statusCode: 429, body: 'Rate limited' };
     const roomId = me && me.roomId ? String(me.roomId) : 'room';
     const key = `uploads/${roomId}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}-${name.replace(/[^a-zA-Z0-9_.-]/g, '-')}`;
     const Expires = 300; // 5 minutes
@@ -35,4 +38,3 @@ exports.handler = async (event) => {
     return { statusCode: 500, body: 'Failed to presign' };
   }
 };
-

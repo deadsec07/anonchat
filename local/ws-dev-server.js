@@ -30,6 +30,7 @@ wss.on('connection', (ws) => {
       const roomId = (msg.roomId || 'lobby').toString().slice(0, 64);
       let alias = (msg.alias || 'anon').toString().slice(0, 32);
       const code = (msg.code || '').toString().slice(0, 32);
+      const quiet = !!msg.quiet;
       // Enforce code when room has one
       if (rooms.has(roomId) && roomCodes.has(roomId)) {
         if (!code || code !== roomCodes.get(roomId)) {
@@ -61,7 +62,7 @@ wss.on('connection', (ws) => {
       meta.set(ws, { ...info, roomId, alias });
       const count = rooms.get(roomId).size;
       try { ws.send(JSON.stringify({ type: 'me', event: 'joined', roomId, alias, ts: Date.now() })); } catch (_) {}
-      broadcast(roomId, { type: 'system', event: 'join', roomId, text: `${alias} joined`, count, ts: Date.now() });
+      if (!quiet) broadcast(roomId, { type: 'system', event: 'join', roomId, text: `${alias} joined`, count, ts: Date.now() });
       return;
     }
 

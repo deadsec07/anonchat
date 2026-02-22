@@ -15,6 +15,9 @@ jobs:
     env:
       AWS_REGION: ${{ github.event.inputs.region || 'us-east-1' }}
       AWS_ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_TO_ASSUME }}
+      VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+      VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+      VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT || 'mailto:you@example.com' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

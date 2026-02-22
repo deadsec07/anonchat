@@ -32,7 +32,7 @@ exports.handler = async (event) => {
       if (!r) continue;
       total += 1;
       counts.set(r, (counts.get(r) || 0) + 1);
-      if (it && it.roomCode) priv.set(r, true);
+      if (it && (it.roomCode || it.roomCodeHash)) priv.set(r, true);
     }
 
     const rooms = Array.from(counts.entries())

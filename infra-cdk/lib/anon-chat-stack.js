@@ -34,7 +34,7 @@ class AnonChatStack extends Stack {
     // Lambda code asset path (re-use existing handlers)
     const codePath = path.join(__dirname, '../../backend/src');
 
-    const makeFn = (id, file) => {
+    const makeFn = (id, file, extraEnv = {}) => {
       const fn = new lambda.Function(this, id, {
         functionName: `${namePrefix}-${id}`,
         runtime: lambda.Runtime.NODEJS_18_X,
@@ -44,7 +44,13 @@ class AnonChatStack extends Stack {
         timeout: Duration.seconds(10),
         reservedConcurrentExecutions: 10,
         logRetention: logs.RetentionDays.ONE_WEEK,
-        environment: { TABLE_NAME: table.tableName },
+        environment: {
+          TABLE_NAME: table.tableName,
+          VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY || '',
+          VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY || '',
+          VAPID_SUBJECT: process.env.VAPID_SUBJECT || 'mailto:admin@example.com',
+          ...extraEnv,
+        },
       });
       table.grantReadWriteData(fn);
       return fn;
@@ -83,7 +89,13 @@ class AnonChatStack extends Stack {
       timeout: Duration.seconds(10),
       reservedConcurrentExecutions: 10,
       logRetention: logs.RetentionDays.ONE_WEEK,
-      environment: { TABLE_NAME: table.tableName, ATTACH_BUCKET: attachBucket.bucketName },
+      environment: {
+        TABLE_NAME: table.tableName,
+        ATTACH_BUCKET: attachBucket.bucketName,
+        VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY || '',
+        VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY || '',
+        VAPID_SUBJECT: process.env.VAPID_SUBJECT || 'mailto:admin@example.com',
+      },
     });
     table.grantReadData(presignFn);
     attachBucket.grantReadWrite(presignFn);
@@ -164,6 +176,13 @@ class AnonChatStack extends Stack {
       integrationUri: integrationUri(presignFn),
       integrationMethod: 'POST',
     });
+    const setCodeFn = makeFn('set_code', 'handlers/set_code');
+    const setCodeInt = new apigwv2.CfnIntegration(this, 'SetCodeIntegration', {
+      apiId: api.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: integrationUri(setCodeFn),
+      integrationMethod: 'POST',
+    });
 
     const connectRoute = new apigwv2.CfnRoute(this, 'RouteConnect', {
       apiId: api.ref,
@@ -210,6 +229,12 @@ class AnonChatStack extends Stack {
       authorizationType: 'NONE',
       target: `integrations/${typingInt.ref}`,
     });
+    const pushSubRoute = new apigwv2.CfnRoute(this, 'RoutePushSub', {
+      apiId: api.ref,
+      routeKey: 'push_subscribe',
+      authorizationType: 'NONE',
+      target: `integrations/${pushSubInt.ref}`,
+    });
 
     const roomsRoute = new apigwv2.CfnRoute(this, 'RouteRooms', {
       apiId: api.ref,
@@ -222,6 +247,12 @@ class AnonChatStack extends Stack {
       routeKey: 'presign',
       authorizationType: 'NONE',
       target: `integrations/${presignInt.ref}`,
+    });
+    const setCodeRoute = new apigwv2.CfnRoute(this, 'RouteSetCode', {
+      apiId: api.ref,
+      routeKey: 'set_code',
+      authorizationType: 'NONE',
+      target: `integrations/${setCodeInt.ref}`,
     });
 
     // Allow API Gateway to invoke Lambdas
@@ -246,8 +277,8 @@ class AnonChatStack extends Stack {
     });
 
     // Ensure deployment order
-    [connectInt, disconnectInt, joinInt, sendInt, dmInt, roomsInt, whoInt, typingInt, presignInt].forEach((intg) => intg.addDependency(stage));
-    [connectRoute, disconnectRoute, joinRoute, sendRoute, dmRoute, roomsRoute, whoRoute, typingRoute, presignRoute].forEach((r) => r.addDependency(stage));
+    [connectInt, disconnectInt, joinInt, sendInt, dmInt, roomsInt, whoInt, typingInt, presignInt, pushSubInt, setCodeInt].forEach((intg) => intg.addDependency(stage));
+    [connectRoute, disconnectRoute, joinRoute, sendRoute, dmRoute, roomsRoute, whoRoute, typingRoute, presignRoute, pushSubRoute, setCodeRoute].forEach((r) => r.addDependency(stage));
 
     new CfnOutput(this, 'WebSocketUrl', {
       value: `wss://${api.ref}.execute-api.${this.region}.amazonaws.com/$default`,
@@ -279,3 +310,10 @@ function sanitize(s) {
 }
 
 module.exports = { AnonChatStack };
+    const pushSubFn = makeFn('push_subscribe', 'handlers/push_subscribe');
+    const pushSubInt = new apigwv2.CfnIntegration(this, 'PushSubIntegration', {
+      apiId: api.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: integrationUri(pushSubFn),
+      integrationMethod: 'POST',
+    });
