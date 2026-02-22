@@ -16,7 +16,7 @@ exports.handler = async (event) => {
       const res = await dynamo
         .scan({
           TableName: TABLE_NAME,
-          ProjectionExpression: 'roomId',
+          ProjectionExpression: 'roomId, roomCode',
           ExclusiveStartKey,
         })
         .promise();
@@ -25,16 +25,18 @@ exports.handler = async (event) => {
     } while (ExclusiveStartKey);
 
     const counts = new Map();
+    const priv = new Map();
     let total = 0;
     for (const it of items) {
       const r = (it && it.roomId) || null;
       if (!r) continue;
       total += 1;
       counts.set(r, (counts.get(r) || 0) + 1);
+      if (it && it.roomCode) priv.set(r, true);
     }
 
     const rooms = Array.from(counts.entries())
-      .map(([roomId, count]) => ({ roomId, count }))
+      .map(([roomId, count]) => ({ roomId, count, private: !!priv.get(roomId) }))
       .sort((a, b) => b.count - a.count || a.roomId.localeCompare(b.roomId));
 
     await broadcast(event, [{ connectionId }], {
@@ -50,4 +52,3 @@ exports.handler = async (event) => {
     return { statusCode: 500, body: 'Failed to list rooms' };
   }
 };
-

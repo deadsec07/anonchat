@@ -5,6 +5,7 @@ const dynamodb = require('aws-cdk-lib/aws-dynamodb');
 const lambda = require('aws-cdk-lib/aws-lambda');
 const apigwv2 = require('aws-cdk-lib/aws-apigatewayv2');
 const logs = require('aws-cdk-lib/aws-logs');
+const s3 = require('aws-cdk-lib/aws-s3');
 
 class AnonChatStack extends Stack {
   constructor(scope, id, props = {}) {
@@ -53,7 +54,39 @@ class AnonChatStack extends Stack {
     const disconnectFn = makeFn('disconnect', 'handlers/disconnect');
     const joinFn = makeFn('join', 'handlers/join');
     const sendFn = makeFn('send', 'handlers/send');
+    const dmFn = makeFn('dm', 'handlers/dm');
     const roomsFn = makeFn('rooms', 'handlers/rooms');
+    const whoFn = makeFn('who', 'handlers/who');
+    const typingFn = makeFn('typing', 'handlers/typing');
+    // Attachments: S3 bucket (temporary) + presign Lambda
+    const attachBucket = new s3.Bucket(this, 'AttachmentsBucket', {
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      lifecycleRules: [{ expiration: Duration.days(7) }],
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+    });
+    attachBucket.addCorsRule({
+      allowedOrigins: ['*'],
+      allowedMethods: [s3.HttpMethods.PUT, s3.HttpMethods.GET, s3.HttpMethods.HEAD],
+      allowedHeaders: ['*'],
+      exposedHeaders: ['ETag'],
+      maxAge: 3000,
+    });
+
+    const presignFn = new lambda.Function(this, 'presign', {
+      functionName: `${namePrefix}-presign`,
+      runtime: lambda.Runtime.NODEJS_18_X,
+      handler: 'handlers/presign.handler',
+      code: lambda.Code.fromAsset(codePath),
+      memorySize: 128,
+      timeout: Duration.seconds(10),
+      reservedConcurrentExecutions: 10,
+      logRetention: logs.RetentionDays.ONE_WEEK,
+      environment: { TABLE_NAME: table.tableName, ATTACH_BUCKET: attachBucket.bucketName },
+    });
+    table.grantReadData(presignFn);
+    attachBucket.grantReadWrite(presignFn);
 
     // WebSocket API (low-level Cfn resources to avoid alpha modules)
     const api = new apigwv2.CfnApi(this, 'WsApi', {
@@ -98,10 +131,37 @@ class AnonChatStack extends Stack {
       integrationMethod: 'POST',
     });
 
+    const dmInt = new apigwv2.CfnIntegration(this, 'DmIntegration', {
+      apiId: api.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: integrationUri(dmFn),
+      integrationMethod: 'POST',
+    });
+
+    const whoInt = new apigwv2.CfnIntegration(this, 'WhoIntegration', {
+      apiId: api.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: integrationUri(whoFn),
+      integrationMethod: 'POST',
+    });
+
+    const typingInt = new apigwv2.CfnIntegration(this, 'TypingIntegration', {
+      apiId: api.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: integrationUri(typingFn),
+      integrationMethod: 'POST',
+    });
+
     const roomsInt = new apigwv2.CfnIntegration(this, 'RoomsIntegration', {
       apiId: api.ref,
       integrationType: 'AWS_PROXY',
       integrationUri: integrationUri(roomsFn),
+      integrationMethod: 'POST',
+    });
+    const presignInt = new apigwv2.CfnIntegration(this, 'PresignIntegration', {
+      apiId: api.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: integrationUri(presignFn),
       integrationMethod: 'POST',
     });
 
@@ -130,11 +190,38 @@ class AnonChatStack extends Stack {
       target: `integrations/${sendInt.ref}`,
     });
 
+    const dmRoute = new apigwv2.CfnRoute(this, 'RouteDm', {
+      apiId: api.ref,
+      routeKey: 'dm',
+      authorizationType: 'NONE',
+      target: `integrations/${dmInt.ref}`,
+    });
+
+    const whoRoute = new apigwv2.CfnRoute(this, 'RouteWho', {
+      apiId: api.ref,
+      routeKey: 'who',
+      authorizationType: 'NONE',
+      target: `integrations/${whoInt.ref}`,
+    });
+
+    const typingRoute = new apigwv2.CfnRoute(this, 'RouteTyping', {
+      apiId: api.ref,
+      routeKey: 'typing',
+      authorizationType: 'NONE',
+      target: `integrations/${typingInt.ref}`,
+    });
+
     const roomsRoute = new apigwv2.CfnRoute(this, 'RouteRooms', {
       apiId: api.ref,
       routeKey: 'rooms',
       authorizationType: 'NONE',
       target: `integrations/${roomsInt.ref}`,
+    });
+    const presignRoute = new apigwv2.CfnRoute(this, 'RoutePresign', {
+      apiId: api.ref,
+      routeKey: 'presign',
+      authorizationType: 'NONE',
+      target: `integrations/${presignInt.ref}`,
     });
 
     // Allow API Gateway to invoke Lambdas
@@ -144,7 +231,11 @@ class AnonChatStack extends Stack {
       { id: 'PermDisconnect', fn: disconnectFn },
       { id: 'PermJoin', fn: joinFn },
       { id: 'PermSend', fn: sendFn },
+      { id: 'PermDm', fn: dmFn },
       { id: 'PermRooms', fn: roomsFn },
+      { id: 'PermWho', fn: whoFn },
+      { id: 'PermTyping', fn: typingFn },
+      { id: 'PermPresign', fn: presignFn },
     ].forEach(({ id, fn }) => {
       new lambda.CfnPermission(this, id, {
         action: 'lambda:InvokeFunction',
@@ -155,15 +246,14 @@ class AnonChatStack extends Stack {
     });
 
     // Ensure deployment order
-    [connectInt, disconnectInt, joinInt, sendInt, roomsInt].forEach((intg) => intg.addDependency(stage));
-    [connectRoute, disconnectRoute, joinRoute, sendRoute, roomsRoute].forEach((r) => r.addDependency(stage));
+    [connectInt, disconnectInt, joinInt, sendInt, dmInt, roomsInt, whoInt, typingInt, presignInt].forEach((intg) => intg.addDependency(stage));
+    [connectRoute, disconnectRoute, joinRoute, sendRoute, dmRoute, roomsRoute, whoRoute, typingRoute, presignRoute].forEach((r) => r.addDependency(stage));
 
     new CfnOutput(this, 'WebSocketUrl', {
       value: `wss://${api.ref}.execute-api.${this.region}.amazonaws.com/$default`,
     });
 
     // Static site S3 bucket
-    const s3 = require('aws-cdk-lib/aws-s3');
     const { Bucket, BucketEncryption, BlockPublicAccess } = s3;
     const siteBucket = new Bucket(this, 'WebsiteBucket', {
       bucketName: undefined, // let CDK name it to avoid collisions

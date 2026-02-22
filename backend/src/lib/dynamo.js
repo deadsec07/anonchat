@@ -8,11 +8,17 @@ function ttlSeconds(days = 2) {
   return now + days * 24 * 60 * 60;
 }
 
+function shortUniq(len = 6) {
+  // compact, reasonably unique per connection
+  return Math.random().toString(36).slice(2, 2 + len);
+}
+
 async function putConnection(connectionId) {
   const item = {
     connectionId,
     createdAt: new Date().toISOString(),
     expiresAt: ttlSeconds(2),
+    uniq: shortUniq(6),
   };
   await dynamo.put({ TableName: TABLE_NAME, Item: item }).promise();
   return item;
@@ -31,20 +37,26 @@ async function getConnection(connectionId) {
   return res.Item || null;
 }
 
-async function setRoomAndAlias(connectionId, roomId, alias) {
+async function setRoomAndAlias(connectionId, roomId, alias, extra = {}) {
+  let update = 'SET roomId = :r, alias = :a, expiresAt = :e';
+  const values = {
+    ':r': roomId,
+    ':a': (alias || 'anon').toString().slice(0, 32),
+    ':e': ttlSeconds(2),
+  };
+  if (extra.roomCode) {
+    update += ', roomCode = :c';
+    values[':c'] = (extra.roomCode + '').slice(0, 32);
+  }
   const params = {
     TableName: TABLE_NAME,
     Key: { connectionId },
-    UpdateExpression: 'SET roomId = :r, alias = :a, expiresAt = :e',
-    ExpressionAttributeValues: {
-      ':r': roomId,
-      ':a': alias,
-      ':e': ttlSeconds(2),
-    },
+    UpdateExpression: update,
+    ExpressionAttributeValues: values,
     ReturnValues: 'ALL_NEW',
   };
-  const res = await dynamo.update(params).promise();
-  return res.Attributes;
+  const upd = await dynamo.update(params).promise();
+  return upd.Attributes;
 }
 
 async function listConnectionsByRoom(roomId) {

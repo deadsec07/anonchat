@@ -1,4 +1,4 @@
-const { getConnection, listConnectionsByRoom, deleteConnection, rateLimitCheck } = require('../lib/dynamo');
+const { getConnection, listConnectionsByRoom, deleteConnection } = require('../lib/dynamo');
 const { broadcast } = require('../lib/broadcast');
 
 function id() {
@@ -16,41 +16,27 @@ exports.handler = async (event) => {
   } catch (_) {}
 
   const text = (body.text || '').toString().trim();
-  const replyTo = body.replyTo && typeof body.replyTo === 'object' ? {
-    id: String(body.replyTo.id || '').slice(0, 64),
-    alias: String(body.replyTo.alias || '').slice(0, 64),
-    text: String(body.replyTo.text || '').slice(0, 256)
-  } : null;
+  const to = (body.to || '').toString().trim();
   if (!text) return { statusCode: 400, body: 'Empty message' };
+  if (!to) return { statusCode: 400, body: 'Missing recipient' };
   if (text.length > 512) return { statusCode: 400, body: 'Message too long' };
 
   try {
     const me = await getConnection(connectionId);
-    if (!me || !me.roomId) {
-      return { statusCode: 400, body: 'Join a room first' };
+    if (!me || !me.roomId) return { statusCode: 400, body: 'Join a room first' };
+
+    if (to && to === (me.alias || '')) {
+      // Inform only the sender: cannot DM yourself
+      await broadcast(event, [{ connectionId }], {
+        type: 'system', event: 'error', roomId: me.roomId, text: 'Cannot DM yourself', ts: Date.now()
+      });
+      return { statusCode: 400, body: 'Cannot DM yourself' };
     }
 
-    // Simple per-connection rate limit
-    const rl = await rateLimitCheck(connectionId, { limit: 30, windowSec: 60 });
-    if (!rl.allowed) {
-      // Inform only the sender
-      await broadcast(
-        event,
-        [me],
-        {
-          type: 'system',
-          event: 'rate_limited',
-          roomId: me.roomId,
-          text: 'Too many messages; slow down',
-          ts: Date.now(),
-          limit: 30,
-          remaining: rl.remaining,
-        }
-      );
-      return { statusCode: 429, body: 'Rate limited' };
-    }
+    const all = await listConnectionsByRoom(me.roomId);
+    const recipients = all.filter((x) => x && x.alias === to);
+    if (!recipients.length) return { statusCode: 404, body: 'Recipient not found' };
 
-    const recipients = await listConnectionsByRoom(me.roomId);
     // Optional small attachment (image only, <=100KB data URL)
     let attachment = undefined;
     if (body.attachment && typeof body.attachment === 'object') {
@@ -64,22 +50,24 @@ exports.handler = async (event) => {
       const okData = /^data:image\//.test(data);
       if (name && okType && okSize && okData) attachment = { name, type, size, data };
     }
-    const message = {
-      type: 'message',
+
+    const payload = {
+      type: 'dm',
       id: id(),
       roomId: me.roomId,
+      from: me.connectionId,
       alias: me.alias || 'anon',
+      to,
       text,
-      ts: Date.now(),
-      replyTo: replyTo || undefined,
       attachment: attachment || undefined,
+      ts: Date.now(),
     };
 
-    await broadcast(event, recipients, message, deleteConnection);
-
+    // include sender so they see their own DM
+    await broadcast(event, [...recipients, { connectionId }], payload, deleteConnection);
     return { statusCode: 200, body: JSON.stringify({ ok: true }) };
   } catch (err) {
-    console.error('send error', err);
-    return { statusCode: 500, body: 'Failed to send' };
+    console.error('dm error', err);
+    return { statusCode: 500, body: 'Failed to send dm' };
   }
 };

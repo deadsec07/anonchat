@@ -12,40 +12,65 @@ exports.handler = async (event) => {
 
   const roomId = (body.roomId || '').toString().trim().slice(0, 64) || 'lobby';
   let alias = (body.alias || '').toString().trim().slice(0, 32) || 'anon';
+  const clientId = ((body.clientId || '') + '').replace(/[^a-zA-Z0-9]/g, '');
+  const quiet = !!body.quiet;
+  const providedCode = (body.code || '').toString().trim().slice(0, 32);
 
   try {
-    // Enforce alias uniqueness within the room (best-effort)
+    // Enforce room code if needed; allow creating a private room when empty
     const existing = await listConnectionsByRoom(roomId);
-    const used = new Set((existing || []).map((x) => (x.alias || '').toString()));
-    if (used.has(alias)) {
-      const base = alias;
-      for (let i = 2; i < 1000; i++) {
-        const suffix = `-${i}`;
-        const maxBase = 32 - suffix.length;
-        const candidate = (base.slice(0, Math.max(1, maxBase)) + suffix).slice(0, 32);
-        if (!used.has(candidate)) {
-          alias = candidate;
-          break;
-        }
+    let existingCode = null;
+    for (const x of existing || []) {
+      if (x && x.roomCode) { existingCode = (x.roomCode + '').trim(); break; }
+    }
+    if (existing.length > 0 && existingCode) {
+      if (!providedCode || providedCode !== existingCode) {
+        // Notify only sender
+        await broadcast(event, [{ connectionId }], {
+          type: 'system', event: 'error', roomId, text: 'Invalid room code', ts: Date.now()
+        });
+        return { statusCode: 200, body: 'Invalid room code' };
       }
     }
 
-    const me = await setRoomAndAlias(connectionId, roomId, alias);
+    // Compute final alias: only suffix when duplicate base alias exists in room
+    const base = alias || 'anon';
+    const suff = clientId ? `-${clientId.slice(-6)}` : '';
+    let finalAlias = base;
+    const hasExact = (existing || []).some((x) => x && String(x.alias) === base);
+    if (hasExact && suff) {
+      const maxBase = Math.max(1, 32 - suff.length);
+      finalAlias = base.slice(0, maxBase) + suff;
+    }
+    alias = finalAlias;
+
+    // Determine room code to persist on this connection
+    let roomCodeToSet = null;
+    if (existing.length === 0 && providedCode) roomCodeToSet = providedCode;
+    if (existing.length > 0 && existingCode) roomCodeToSet = existingCode;
+
+    const me = await setRoomAndAlias(connectionId, roomId, alias, roomCodeToSet ? { roomCode: roomCodeToSet } : {});
+    // Inform the sender of their resolved alias
+    await broadcast(event, [{ connectionId }], {
+      type: 'me', event: 'joined', roomId, alias: me.alias, ts: Date.now()
+    });
     const recipients = await listConnectionsByRoom(roomId);
 
-    await broadcast(
-      event,
-      recipients,
-      {
-        type: 'system',
-        event: 'join',
-        roomId,
-        text: `${alias} joined`,
-        count: (recipients || []).length,
-        ts: Date.now(),
-      },
-      deleteConnection
-    );
+    if (!quiet) {
+      await broadcast(
+        event,
+        recipients,
+        {
+          type: 'system',
+          event: 'join',
+          roomId,
+          text: `${alias} joined`,
+          count: (recipients || []).length,
+          ts: Date.now(),
+        },
+        deleteConnection
+      );
+    }
 
     return {
       statusCode: 200,
