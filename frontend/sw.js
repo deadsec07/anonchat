@@ -1,4 +1,4 @@
-const CACHE_NAME = 'anonchat-v4';
+const CACHE_NAME = 'anonchat-v5';
 self.addEventListener('install', (e) => {
   self.skipWaiting();
   e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll([
