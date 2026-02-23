@@ -76,6 +76,7 @@
   const btnLogin = $('btnLogin');
   const btnLoginLobby = document.getElementById('btnLoginLobby');
   const btnLogout = $('btnLogout');
+  const btnLoginClose = document.getElementById('btnLoginClose');
   const rememberSession = $('rememberSession');
   const statusEl = $('status');
   const loginError = $('loginError');
@@ -757,8 +758,9 @@
       requestUsers();
       setupPwaAndPush();
     };
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
       setStatus('disconnected', '#ef4444');
+      try { console.warn('[ws close]', ev && (ev.code + ' ' + ev.reason)); } catch (_) {}
       joined = false;
       myAliasServer = '';
       composerEl.hidden = true;
@@ -773,7 +775,7 @@
       updateLobbyButton();
       showReconnectButton();
     };
-    ws.onerror = () => setStatus('error', '#ef4444');
+    ws.onerror = (e) => { try { console.error('[ws error]', e); } catch (_) {} setStatus('error', '#ef4444'); };
     ws.onmessage = async (ev) => {
       try {
         const msg = JSON.parse(ev.data);
@@ -1089,6 +1091,13 @@
   }
 
   if (btnLogin) btnLogin.addEventListener('click', (e) => { e.preventDefault(); doLogin(); });
+  if (btnLoginClose) btnLoginClose.addEventListener('click', (e) => {
+    e.preventDefault();
+    // Close login and show landing; also disable remember to prevent auto-popup next load
+    try { localStorage.removeItem('ac:remember'); } catch (_) {}
+    hideOverlay();
+    showLanding();
+  });
   if (btnLoginLobby) btnLoginLobby.addEventListener('click', (e) => {
     e.preventDefault();
     if (loginRoom) loginRoom.value = 'lobby';
@@ -1131,6 +1140,7 @@
   if (loginAlias) loginAlias.addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
   if (btnLogout) btnLogout.addEventListener('click', () => {
     try { sessionStorage.removeItem('ac:loggedIn'); } catch (_) {}
+    try { localStorage.removeItem('ac:remember'); localStorage.removeItem('ac:lastRoom'); localStorage.removeItem('ac:lastAlias'); } catch (_) {}
     if (ws) try { ws.close(); } catch (_) {}
     joined = false;
     myAliasServer = '';
@@ -1648,8 +1658,10 @@
     if (loginRoom && !loginRoom.value) loginRoom.value = r || localStorage.getItem('ac:lastRoom') || '';
     if (loginAlias && !loginAlias.value) loginAlias.value = a || localStorage.getItem('ac:lastAlias') || '';
     const remember = localStorage.getItem('ac:remember') === '1';
+    const rememberedRoom = localStorage.getItem('ac:lastRoom') || '';
+    const rememberedAlias = localStorage.getItem('ac:lastAlias') || '';
     if (rememberSession) rememberSession.checked = remember;
-    if ((r && a && auto === '1') || remember) {
+    if ((r && a && auto === '1') || (remember && rememberedRoom && rememberedAlias)) {
       window.__quietJoin = true;
       doLogin();
     } else {

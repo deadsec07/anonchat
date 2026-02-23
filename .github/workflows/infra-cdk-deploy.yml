@@ -53,6 +53,11 @@ jobs:
         run: |
           npx cdk bootstrap || true
 
+      - name: Install backend Lambda deps (aws-sdk)
+        working-directory: backend/src
+        run: |
+          npm install --no-audit --no-fund
+
       - name: Synth
         working-directory: infra-cdk
         run: npx cdk synth
