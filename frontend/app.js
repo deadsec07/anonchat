@@ -1436,16 +1436,18 @@
     hideDmKeyModal();
   });
 
-  // Load any saved DM keys
+  // Load any saved DM keys (do not mutate UI until a partner is selected)
   try {
     const items = Object.keys(localStorage).filter((k) => k.startsWith('ac:dmkey:'));
     for (const k of items) {
       const partner = k.replace('ac:dmkey:','');
       const pass = localStorage.getItem(k);
       if (pass) {
-        deriveKey(pass).then((key) => { dmKeys.set(partner, key); reflectDmEncryptState(partner); }).catch(() => {});
+        deriveKey(pass).then((key) => { dmKeys.set(partner, key); }).catch(() => {});
       }
     }
+    // Reflect current selection state once at start
+    reflectDmEncryptState();
   } catch (_) {}
 
   async function deriveKey(pass) {
