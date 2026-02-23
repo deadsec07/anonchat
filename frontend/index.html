@@ -331,6 +331,22 @@
       </div>
     </div>
 
+    <!-- DM Secret Modal -->
+    <div id="dmKeyOverlay" hidden style="display:none" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50">
+      <div class="w-[92%] max-w-sm rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-5 relative">
+        <button id="btnDmKeyClose" class="absolute right-2 top-2 text-slate-400 hover:text-slate-200" title="Close" aria-label="Close">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+        <h3 class="text-lg font-semibold mb-2">Set DM Secret</h3>
+        <p class="text-sm text-slate-300 mb-3">Enter a shared secret with <span id="dmKeyPartner" class="font-semibold"></span>. Both sides must enter the same secret to read encrypted DMs.</p>
+        <input id="dmKeyInput" type="password" placeholder="Shared secret" maxlength="128" class="w-full rounded-lg bg-slate-800/80 border border-slate-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400 mb-3" />
+        <div class="flex justify-end gap-2">
+          <button id="btnDmKeyCancel" class="rounded bg-slate-800/70 hover:bg-slate-800 text-slate-200 text-sm font-semibold px-3 py-1 border border-slate-600">Cancel</button>
+          <button id="btnDmKeySave" class="rounded bg-emerald-500/90 hover:bg-emerald-500 text-slate-900 text-sm font-semibold px-3 py-1 border border-emerald-400/30">Save</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Login Overlay -->
     <div id="loginOverlay" hidden style="display:none" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50">
       <div class="w-[92%] max-w-md rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-6 relative">

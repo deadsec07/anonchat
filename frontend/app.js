@@ -53,6 +53,12 @@
   const dmThreadBack = document.getElementById('btnDmThreadBack');
   const dmEncryptToggle = document.getElementById('dmEncryptToggle');
   const btnDmSetKey = document.getElementById('btnDmSetKey');
+  const dmKeyOverlay = document.getElementById('dmKeyOverlay');
+  const dmKeyPartner = document.getElementById('dmKeyPartner');
+  const dmKeyInput = document.getElementById('dmKeyInput');
+  const btnDmKeySave = document.getElementById('btnDmKeySave');
+  const btnDmKeyCancel = document.getElementById('btnDmKeyCancel');
+  const btnDmKeyClose = document.getElementById('btnDmKeyClose');
   const btnAttach = document.getElementById('btnAttach');
   const fileAttach = document.getElementById('fileAttach');
   const attachPreview = document.getElementById('attachPreview');
@@ -1379,15 +1385,32 @@
   if (dmThreadClose) dmThreadClose.addEventListener('click', () => { hideDmThread(); });
   if (dmThreadBack) dmThreadBack.addEventListener('click', () => { hideDmThread(); openDmsPanel(); });
   if (dmThreadSelect) dmThreadSelect.addEventListener('change', () => { const v = dmThreadSelect.value; if (v) { setDmTarget(v); openDmThread(v); } });
-  if (btnDmSetKey) btnDmSetKey.addEventListener('click', async () => {
+  function showDmKeyModal(partner) {
+    if (!dmKeyOverlay) return;
+    if (dmKeyPartner) dmKeyPartner.textContent = partner || '';
+    if (dmKeyInput) dmKeyInput.value = '';
+    dmKeyOverlay.hidden = false; dmKeyOverlay.style.display = '';
+    try { setTimeout(() => { dmKeyInput && dmKeyInput.focus(); }, 0); } catch (_) {}
+  }
+  function hideDmKeyModal() { if (!dmKeyOverlay) return; dmKeyOverlay.hidden = true; dmKeyOverlay.style.display = 'none'; }
+  if (btnDmSetKey) btnDmSetKey.addEventListener('click', () => {
     const partner = dmTarget || (dmThreadSelect && dmThreadSelect.value) || '';
-    const pass = prompt(`Set shared secret with ${partner}`);
-    if (pass == null) return;
     if (!partner) return;
+    showDmKeyModal(partner);
+  });
+  if (btnDmKeyCancel) btnDmKeyCancel.addEventListener('click', (e) => { e.preventDefault(); hideDmKeyModal(); });
+  if (btnDmKeyClose) btnDmKeyClose.addEventListener('click', (e) => { e.preventDefault(); hideDmKeyModal(); });
+  if (btnDmKeySave) btnDmKeySave.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const partner = dmTarget || (dmThreadSelect && dmThreadSelect.value) || '';
+    if (!partner || !dmKeyInput) { hideDmKeyModal(); return; }
+    const pass = (dmKeyInput.value || '').toString();
+    if (!pass) { hideDmKeyModal(); return; }
     const key = await deriveKey(pass);
     dmKeys.set(partner, key);
     try { localStorage.setItem(`ac:dmkey:${partner}`, pass); } catch (_) {}
     if (dmEncryptToggle) dmEncryptToggle.checked = true;
+    hideDmKeyModal();
   });
   if (dmEncryptToggle) dmEncryptToggle.addEventListener('change', async () => {
     const on = !!dmEncryptToggle.checked;
