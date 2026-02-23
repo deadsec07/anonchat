@@ -1416,11 +1416,19 @@
     const on = !!dmEncryptToggle.checked;
     const partner = dmTarget || (dmThreadSelect && dmThreadSelect.value) || '';
     if (!partner) { dmEncryptToggle.checked = false; return; }
-    if (!on) { dmKeys.delete(partner); try { localStorage.removeItem(`ac:dmkey:${partner}`); } catch (_) {} return; }
+    if (!on) {
+      dmKeys.delete(partner);
+      try { localStorage.removeItem(`ac:dmkey:${partner}`); } catch (_) {}
+      return;
+    }
     let pass = null;
     try { pass = localStorage.getItem(`ac:dmkey:${partner}`) || null; } catch (_) {}
-    if (!pass) pass = prompt(`Enter shared secret with ${partner}`) || '';
-    if (!pass) { dmEncryptToggle.checked = false; return; }
+    if (!pass) {
+      // Open modal to set secret instead of prompt
+      dmEncryptToggle.checked = false;
+      showDmKeyModal(partner);
+      return;
+    }
     const key = await deriveKey(pass);
     dmKeys.set(partner, key);
   });
@@ -1656,10 +1664,15 @@
     if (!mentionBox.contains(e.target) && e.target !== inputEl) closeMention();
   });
 
-  // Click-outside to dismiss DM thread
+  // Click-outside to dismiss DM thread (ignore when modals are open)
   document.addEventListener('mousedown', (e) => {
     try {
       if (!dmThreadPanel || dmThreadPanel.hidden) return;
+      // If DM key modal or other overlays are open, don't close the thread
+      const anyModalOpen = (dmKeyOverlay && !dmKeyOverlay.hidden && dmKeyOverlay.style.display !== 'none') ||
+        (aliasOverlay && !aliasOverlay.hidden && aliasOverlay.style.display !== 'none') ||
+        (loginOverlay && !loginOverlay.hidden && loginOverlay.style.display !== 'none');
+      if (anyModalOpen) return;
       if (!dmThreadPanel.contains(e.target)) hideDmThread();
     } catch (_) {}
   });
