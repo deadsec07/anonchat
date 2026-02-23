@@ -17,7 +17,8 @@ async function putConnection(connectionId) {
   const item = {
     connectionId,
     createdAt: new Date().toISOString(),
-    expiresAt: ttlSeconds(2),
+    expiresAt: ttlSeconds(1),
+    lastActiveAt: Math.floor(Date.now() / 1000),
     uniq: shortUniq(6),
   };
   await dynamo.put({ TableName: TABLE_NAME, Item: item }).promise();
@@ -38,11 +39,12 @@ async function getConnection(connectionId) {
 }
 
 async function setRoomAndAlias(connectionId, roomId, alias, extra = {}) {
-  let update = 'SET roomId = :r, alias = :a, expiresAt = :e';
+  let update = 'SET roomId = :r, alias = :a, expiresAt = :e, lastActiveAt = :la';
   const values = {
     ':r': roomId,
     ':a': (alias || 'anon').toString().slice(0, 32),
-    ':e': ttlSeconds(2),
+    ':e': ttlSeconds(1),
+    ':la': Math.floor(Date.now() / 1000),
   };
   if (extra.roomCode) {
     update += ', roomCode = :c';
@@ -98,7 +100,7 @@ async function rateLimitCheck(connectionId, { limit = 30, windowSec = 60 } = {})
       .update({
         TableName: TABLE_NAME,
         Key: { connectionId },
-        UpdateExpression: 'SET rlResetAt = :r, rlCount = :one',
+        UpdateExpression: 'SET rlResetAt = :r, rlCount = :one, lastActiveAt = :now',
         ConditionExpression: 'attribute_not_exists(rlResetAt) OR rlResetAt < :now',
         ExpressionAttributeValues: { ':r': newResetAt, ':one': 1, ':now': now },
         ReturnValues: 'UPDATED_NEW',
@@ -114,8 +116,8 @@ async function rateLimitCheck(connectionId, { limit = 30, windowSec = 60 } = {})
     .update({
       TableName: TABLE_NAME,
       Key: { connectionId },
-      UpdateExpression: 'ADD rlCount :one',
-      ExpressionAttributeValues: { ':one': 1 },
+      UpdateExpression: 'SET lastActiveAt = :now ADD rlCount :one',
+      ExpressionAttributeValues: { ':one': 1, ':now': now },
       ReturnValues: 'ALL_NEW',
     })
     .promise();

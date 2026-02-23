@@ -60,6 +60,7 @@
   const dmBar = document.getElementById('dmBar');
   const dmTargetLabel = document.getElementById('dmTargetLabel');
   const btnDmClear = document.getElementById('btnDmClear');
+  const btnReconnect = document.getElementById('btnReconnect');
   const replyBar = document.getElementById('replyBar');
   const replyToLabel = document.getElementById('replyToLabel');
   const replyToExcerpt = document.getElementById('replyToExcerpt');
@@ -114,6 +115,44 @@
   let lastAttachFile = null;
   let lastDmAttachFile = null;
   const dmKeys = new Map(); // alias -> CryptoKey
+
+  // Idle auto-disconnect to reduce WS minutes
+  const IDLE_MS = 5 * 60 * 1000; // 5 minutes; adjust via code if needed
+  let idleTimer = null;
+  let lastActivity = Date.now();
+  let idleClosed = false;
+  let lastReconnectAttempt = 0;
+
+  function isWsOpen() { try { return ws && ws.readyState === WebSocket.OPEN; } catch (_) { return false; } }
+  function showReconnectButton() { if (btnReconnect) { btnReconnect.hidden = false; btnReconnect.style.display = ''; } }
+  function hideReconnectButton() { if (btnReconnect) { btnReconnect.hidden = true; btnReconnect.style.display = 'none'; } }
+  function markActivity() {
+    lastActivity = Date.now();
+    if (idleClosed && !isWsOpen() && room && alias) {
+      const now = Date.now();
+      if (now - lastReconnectAttempt > 2000) {
+        lastReconnectAttempt = now;
+        try { connectAndJoin(); } catch (_) {}
+      }
+    }
+    scheduleIdleCheck();
+  }
+  function scheduleIdleCheck() {
+    try { if (idleTimer) clearTimeout(idleTimer); } catch (_) {}
+    idleTimer = setTimeout(() => {
+      try {
+        const now = Date.now();
+        const idle = now - lastActivity >= IDLE_MS;
+        if (idle && isWsOpen()) {
+          idleClosed = true;
+          try { ws.close(); } catch (_) {}
+          showReconnectButton();
+          return;
+        }
+      } catch (_) {}
+      scheduleIdleCheck();
+    }, IDLE_MS);
+  }
 
   function setDmTarget(name) {
     dmTarget = name || null;
@@ -505,6 +544,12 @@
   }
 
   function appendMessage(msg) {
+    try {
+      if (msg && msg.type === 'system' && typeof msg.count === 'number' && String(msg.roomId || '') === String(room || '')) {
+        members = Number(msg.count) || 0;
+        setStatus('connected', '#22c55e');
+      }
+    } catch (_) {}
     const li = document.createElement('li');
     if (msg.type === 'system') li.classList.add('system');
     if (msg.type === 'dm') li.classList.add('dm');
@@ -682,11 +727,16 @@
       hideOverlay();
       hideLanding();
       showApp();
-      // Initial connect: quiet only if this tab has joined before (reload scenario)
-      let isReload = false;
-      try { isReload = sessionStorage.getItem('ac:firstJoinDone') === '1'; } catch (_) {}
-      ws.send(JSON.stringify({ action: 'join', roomId: room, alias, clientId: getClientId(), code: myRoomCode || undefined, quiet: !!isReload }));
-      try { sessionStorage.setItem('ac:firstJoinDone', '1'); } catch (_) {}
+      idleClosed = false;
+      hideReconnectButton();
+      markActivity();
+      // Initial connect: quiet only if reconnecting within a few seconds
+      let lastJoinTs = 0;
+      try { lastJoinTs = parseInt(sessionStorage.getItem('ac:lastJoinTs') || '0', 10) || 0; } catch (_) {}
+      const now = Date.now();
+      const isQuickReconnect = lastJoinTs && (now - lastJoinTs) < 10000;
+      ws.send(JSON.stringify({ action: 'join', roomId: room, alias, clientId: getClientId(), code: myRoomCode || undefined, quiet: !!isQuickReconnect }));
+      try { sessionStorage.setItem('ac:lastJoinTs', String(now)); } catch (_) {}
       joined = true;
       joinEl.hidden = true;
       composerEl.hidden = false;
@@ -710,6 +760,7 @@
     ws.onclose = () => {
       setStatus('disconnected', '#ef4444');
       joined = false;
+      myAliasServer = '';
       composerEl.hidden = true;
       joinEl.hidden = false;
       hideComposerBanners();
@@ -720,6 +771,7 @@
       hideApp();
       showOverlay();
       updateLobbyButton();
+      showReconnectButton();
     };
     ws.onerror = () => setStatus('error', '#ef4444');
     ws.onmessage = async (ev) => {
@@ -1081,6 +1133,9 @@
     try { sessionStorage.removeItem('ac:loggedIn'); } catch (_) {}
     if (ws) try { ws.close(); } catch (_) {}
     joined = false;
+    myAliasServer = '';
+    alias = '';
+    room = '';
     composerEl.hidden = true;
     joinEl.hidden = false;
     setStatus('disconnected', '#ef4444');
@@ -1547,6 +1602,15 @@
       hideDmsPanel();
     }
   });
+
+  // Idle activity tracking and reconnect
+  if (btnReconnect) btnReconnect.addEventListener('click', () => { try { connectAndJoin(); } catch (_) {} });
+  ['mousemove','keydown','touchstart','scroll','focusin'].forEach((ev) => {
+    document.addEventListener(ev, markActivity, { passive: true });
+  });
+  window.addEventListener('focus', markActivity);
+  if (inputEl) inputEl.addEventListener('input', markActivity);
+  if (dmInput) dmInput.addEventListener('input', markActivity);
 
   inputEl.addEventListener('keydown', (e) => {
     if (mentionOpen) {

@@ -16,7 +16,7 @@ exports.handler = async (event) => {
       const res = await dynamo
         .scan({
           TableName: TABLE_NAME,
-          ProjectionExpression: 'roomId, roomCode',
+          ProjectionExpression: 'roomId, roomCode, roomCodeHash, lastActiveAt, createdAt',
           ExclusiveStartKey,
         })
         .promise();
@@ -27,9 +27,20 @@ exports.handler = async (event) => {
     const counts = new Map();
     const priv = new Map();
     let total = 0;
+    const nowSec = Math.floor(Date.now() / 1000);
+    const ACTIVE_WINDOW = 180; // seconds
     for (const it of items) {
       const r = (it && it.roomId) || null;
       if (!r) continue;
+      // Consider only recently active connections to avoid stale entries
+      const la = Number(it && it.lastActiveAt) || 0;
+      let recent = false;
+      if (la && nowSec - la <= ACTIVE_WINDOW) recent = true;
+      else if (it && it.createdAt) {
+        const t = Date.parse(String(it.createdAt));
+        if (!Number.isNaN(t)) recent = (Date.now() - t) <= ACTIVE_WINDOW * 1000;
+      }
+      if (!recent) continue;
       total += 1;
       counts.set(r, (counts.get(r) || 0) + 1);
       if (it && (it.roomCode || it.roomCodeHash)) priv.set(r, true);

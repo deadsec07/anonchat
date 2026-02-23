@@ -6,6 +6,11 @@ const lambda = require('aws-cdk-lib/aws-lambda');
 const apigwv2 = require('aws-cdk-lib/aws-apigatewayv2');
 const logs = require('aws-cdk-lib/aws-logs');
 const s3 = require('aws-cdk-lib/aws-s3');
+const cloudfront = require('aws-cdk-lib/aws-cloudfront');
+const origins = require('aws-cdk-lib/aws-cloudfront-origins');
+const route53 = require('aws-cdk-lib/aws-route53');
+const targets = require('aws-cdk-lib/aws-route53-targets');
+const acm = require('aws-cdk-lib/aws-certificatemanager');
 
 class AnonChatStack extends Stack {
   constructor(scope, id, props = {}) {
@@ -13,13 +18,14 @@ class AnonChatStack extends Stack {
 
     const appName = (props.appName || 'anonchat').toString();
     const namePrefix = sanitize(appName);
+    const fullPrefix = namePrefix;
 
     // Tags for easy identification in accounts with other infra
     Tags.of(this).add('Project', 'anonchat');
 
     // DynamoDB table for connections
     const table = new dynamodb.Table(this, 'ConnectionsTable', {
-      tableName: `${namePrefix}-Connections`,
+      tableName: `${fullPrefix}-Connections`,
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       partitionKey: { name: 'connectionId', type: dynamodb.AttributeType.STRING },
       timeToLiveAttribute: 'expiresAt',
@@ -36,13 +42,12 @@ class AnonChatStack extends Stack {
 
     const makeFn = (id, file, extraEnv = {}) => {
       const fn = new lambda.Function(this, id, {
-        functionName: `${namePrefix}-${id}`,
+        functionName: `${fullPrefix}-${id}`,
         runtime: lambda.Runtime.NODEJS_18_X,
         handler: `${file}.handler`,
         code: lambda.Code.fromAsset(codePath),
         memorySize: 128,
         timeout: Duration.seconds(10),
-        reservedConcurrentExecutions: 10,
         logRetention: logs.RetentionDays.ONE_WEEK,
         environment: {
           TABLE_NAME: table.tableName,
@@ -64,6 +69,7 @@ class AnonChatStack extends Stack {
     const roomsFn = makeFn('rooms', 'handlers/rooms');
     const whoFn = makeFn('who', 'handlers/who');
     const typingFn = makeFn('typing', 'handlers/typing');
+    const pushSubFn = makeFn('push_subscribe', 'handlers/push_subscribe');
     // Attachments: S3 bucket (temporary) + presign Lambda
     const attachBucket = new s3.Bucket(this, 'AttachmentsBucket', {
       encryption: s3.BucketEncryption.S3_MANAGED,
@@ -81,13 +87,12 @@ class AnonChatStack extends Stack {
     });
 
     const presignFn = new lambda.Function(this, 'presign', {
-      functionName: `${namePrefix}-presign`,
+      functionName: `${fullPrefix}-presign`,
       runtime: lambda.Runtime.NODEJS_18_X,
       handler: 'handlers/presign.handler',
       code: lambda.Code.fromAsset(codePath),
       memorySize: 128,
       timeout: Duration.seconds(10),
-      reservedConcurrentExecutions: 10,
       logRetention: logs.RetentionDays.ONE_WEEK,
       environment: {
         TABLE_NAME: table.tableName,
@@ -102,7 +107,7 @@ class AnonChatStack extends Stack {
 
     // WebSocket API (low-level Cfn resources to avoid alpha modules)
     const api = new apigwv2.CfnApi(this, 'WsApi', {
-      name: `${namePrefix}-WsApi`,
+      name: `${fullPrefix}-WsApi`,
       protocolType: 'WEBSOCKET',
       routeSelectionExpression: '$request.body.action',
     });
@@ -174,6 +179,12 @@ class AnonChatStack extends Stack {
       apiId: api.ref,
       integrationType: 'AWS_PROXY',
       integrationUri: integrationUri(presignFn),
+      integrationMethod: 'POST',
+    });
+    const pushSubInt = new apigwv2.CfnIntegration(this, 'PushSubIntegration', {
+      apiId: api.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: integrationUri(pushSubFn),
       integrationMethod: 'POST',
     });
     const setCodeFn = makeFn('set_code', 'handlers/set_code');
@@ -267,6 +278,7 @@ class AnonChatStack extends Stack {
       { id: 'PermWho', fn: whoFn },
       { id: 'PermTyping', fn: typingFn },
       { id: 'PermPresign', fn: presignFn },
+      { id: 'PermPushSub', fn: pushSubFn },
     ].forEach(({ id, fn }) => {
       new lambda.CfnPermission(this, id, {
         action: 'lambda:InvokeFunction',
@@ -284,24 +296,69 @@ class AnonChatStack extends Stack {
       value: `wss://${api.ref}.execute-api.${this.region}.amazonaws.com/$default`,
     });
 
-    // Static site S3 bucket
+    // Static site S3 bucket (private) + CloudFront
     const { Bucket, BucketEncryption, BlockPublicAccess } = s3;
     const siteBucket = new Bucket(this, 'WebsiteBucket', {
       bucketName: undefined, // let CDK name it to avoid collisions
       encryption: BucketEncryption.S3_MANAGED,
-      blockPublicAccess: new BlockPublicAccess({
-        blockPublicAcls: false,
-        blockPublicPolicy: false,
-        ignorePublicAcls: false,
-        restrictPublicBuckets: false,
-      }),
-      publicReadAccess: true,
-      websiteIndexDocument: 'index.html',
+      blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
+      publicReadAccess: false,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
       autoDeleteObjects: false,
     });
+    // Optional: Custom domain via Route53 + ACM (us-east-1 required for CloudFront)
+    const zone = route53.HostedZone.fromLookup(this, 'HostedZone', { domainName: 'hnetechnologies.com' });
+    const cert = new acm.DnsValidatedCertificate(this, 'WebsiteCert', {
+      domainName: 'anonchat.hnetechnologies.com',
+      hostedZone: zone,
+      region: 'us-east-1',
+    });
+
+    // CloudFront with OAI and Price Class 200
+    const oai = new cloudfront.OriginAccessIdentity(this, 'WebsiteOAI');
+    siteBucket.grantRead(oai);
+    const s3Origin = new origins.S3Origin(siteBucket, { originAccessIdentity: oai });
+    const dist = new cloudfront.Distribution(this, 'WebsiteDistribution', {
+      defaultRootObject: 'index.html',
+      priceClass: cloudfront.PriceClass.PRICE_CLASS_200,
+      domainNames: ['anonchat.hnetechnologies.com'],
+      certificate: cert,
+      defaultBehavior: {
+        origin: s3Origin,
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
+        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+        compress: true,
+      },
+      additionalBehaviors: {
+        '/index.html': {
+          origin: s3Origin,
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          compress: true,
+        },
+      },
+    });
     new CfnOutput(this, 'WebsiteBucketName', { value: siteBucket.bucketName });
-    new CfnOutput(this, 'WebsiteUrl', { value: siteBucket.bucketWebsiteUrl });
+    new CfnOutput(this, 'WebsiteUrl', { value: `https://${dist.domainName}` });
+    new CfnOutput(this, 'CloudFrontDistributionId', { value: dist.distributionId });
+    new CfnOutput(this, 'WebsiteCustomDomain', { value: 'https://anonchat.hnetechnologies.com' });
+    new CfnOutput(this, 'CertificateArn', { value: cert.certificateArn });
+
+    // Route53 A/AAAA Alias to CloudFront
+    new route53.ARecord(this, 'WebsiteAliasARecord', {
+      zone,
+      recordName: 'anonchat',
+      target: route53.RecordTarget.fromAlias(new targets.CloudFrontTarget(dist)),
+      ttl: cdk.Duration.minutes(5),
+    });
+    new route53.AaaaRecord(this, 'WebsiteAliasAAAARecord', {
+      zone,
+      recordName: 'anonchat',
+      target: route53.RecordTarget.fromAlias(new targets.CloudFrontTarget(dist)),
+      ttl: cdk.Duration.minutes(5),
+    });
   }
 }
 
@@ -310,10 +367,3 @@ function sanitize(s) {
 }
 
 module.exports = { AnonChatStack };
-    const pushSubFn = makeFn('push_subscribe', 'handlers/push_subscribe');
-    const pushSubInt = new apigwv2.CfnIntegration(this, 'PushSubIntegration', {
-      apiId: api.ref,
-      integrationType: 'AWS_PROXY',
-      integrationUri: integrationUri(pushSubFn),
-      integrationMethod: 'POST',
-    });
