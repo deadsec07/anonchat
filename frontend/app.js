@@ -831,6 +831,7 @@
           // Render rooms list panel, or fallback to alert if panel missing
           if (roomsPanel && roomsList) {
             if (usersPanel) usersPanel.hidden = true;
+            if (dmsPanel) dmsPanel.hidden = true;
             roomsList.innerHTML = '';
             const total = document.createElement('li');
             total.className = 'py-2 text-slate-400';
@@ -911,6 +912,7 @@
           } catch (_) {}
           if (usersPanel && usersList) {
             if (roomsPanel) roomsPanel.hidden = true;
+            if (dmsPanel) dmsPanel.hidden = true;
             usersList.innerHTML = '';
             for (const name of usersInRoom) {
               const li = document.createElement('li');
@@ -1315,9 +1317,7 @@
     });
   }
   function openLoginModalViaNav() {
-    try { history.pushState({ view: 'login' }, '', '#join'); } catch (_) {}
-    hideLanding();
-    showOverlay();
+    try { window.location.assign('/chat'); } catch (_) { window.location.href = '/chat'; }
   }
   const btnChatNow = document.getElementById('btnChatNow');
   if (btnChatNow) btnChatNow.addEventListener('click', openLoginModalViaNav);
@@ -1665,8 +1665,10 @@
   });
   inputEl.addEventListener('blur', () => { sendTyping(false); });
 
-  // Seed from querystring + drive login overlay
+  // Route-based init: landing at '/', chat at '/chat'
   try {
+    const path = (location.pathname || '').replace(/\/+$/, '') || '/';
+    const isChatRoute = path === '/chat';
     const params = new URLSearchParams(location.search);
     const r = params.get('room');
     const a = params.get('alias');
@@ -1676,19 +1678,24 @@
     if (a) aliasEl.value = a;
     if (code && loginCode) loginCode.value = code;
     if (code && loginPrivate) loginPrivate.checked = true;
-    // Keep Copy enabled when code pre-populated via querystring
     const btnCopyCodeInit = document.getElementById('btnCopyCode');
     if (btnCopyCodeInit && loginPrivate && loginPrivate.checked && loginCode && loginCode.value) btnCopyCodeInit.disabled = false;
     if (loginRoom && !loginRoom.value) loginRoom.value = r || localStorage.getItem('ac:lastRoom') || '';
     if (loginAlias && !loginAlias.value) loginAlias.value = a || localStorage.getItem('ac:lastAlias') || '';
-    const remember = localStorage.getItem('ac:remember') === '1';
-    const rememberedRoom = localStorage.getItem('ac:lastRoom') || '';
-    const rememberedAlias = localStorage.getItem('ac:lastAlias') || '';
-    if (rememberSession) rememberSession.checked = remember;
-    if ((r && a && auto === '1') || (remember && rememberedRoom && rememberedAlias)) {
-      window.__quietJoin = true;
-      doLogin();
+    if (isChatRoute) {
+      const remember = localStorage.getItem('ac:remember') === '1';
+      const rememberedRoom = localStorage.getItem('ac:lastRoom') || '';
+      const rememberedAlias = localStorage.getItem('ac:lastAlias') || '';
+      if (rememberSession) rememberSession.checked = remember;
+      if ((r && a && auto === '1') || (remember && rememberedRoom && rememberedAlias)) {
+        window.__quietJoin = true;
+        doLogin();
+      } else {
+        showOverlay();
+      }
     } else {
+      // Always show landing on root or other routes
+      hideOverlay();
       showLanding();
     }
   } catch (_) {}

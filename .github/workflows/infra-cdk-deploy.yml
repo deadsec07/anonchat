@@ -154,4 +154,4 @@ jobs:
         run: |
           aws cloudfront create-invalidation \
             --distribution-id ${{ steps.cf.outputs.dist_id }} \
-            --paths "/" "/index.html" "/config.js" "/sw.js"
+            --paths "/" "/index.html" "/config.js" "/sw.js" "/chat"
