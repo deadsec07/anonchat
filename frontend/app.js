@@ -51,7 +51,7 @@
   const dmInput = document.getElementById('dmInput');
   const dmSend = document.getElementById('btnDmSend');
   const dmThreadBack = document.getElementById('btnDmThreadBack');
-  const dmEncryptToggle = document.getElementById('dmEncryptToggle');
+  const dmEncryptToggle = null; // deprecated toggle; use modal button instead
   const btnDmSetKey = document.getElementById('btnDmSetKey');
   const dmKeyOverlay = document.getElementById('dmKeyOverlay');
   const dmKeyPartner = document.getElementById('dmKeyPartner');
@@ -313,8 +313,7 @@
       dmUnread.set(name, 0);
       updateDmsButton();
     }
-    // reflect encryption toggle for this partner
-    if (dmEncryptToggle) dmEncryptToggle.checked = !!dmKeys.get(name);
+    // reflect encryption state if needed (toggle removed)
   }
 
   function hideDmThread() {
@@ -813,7 +812,7 @@
             if (msg.enc && dmKeys.get(partner)) {
               try { msg.text = await decryptText(dmKeys.get(partner), msg.enc); } catch (_) { msg.text = '[encrypted]'; }
             } else if (msg.enc) {
-              msg.text = '[encrypted]';
+              msg.text = 'Encrypted message — ask for the secret to view';
             }
             const thread = ensureThread(partner);
             thread.push(msg);
@@ -1409,28 +1408,7 @@
     const key = await deriveKey(pass);
     dmKeys.set(partner, key);
     try { localStorage.setItem(`ac:dmkey:${partner}`, pass); } catch (_) {}
-    if (dmEncryptToggle) dmEncryptToggle.checked = true;
     hideDmKeyModal();
-  });
-  if (dmEncryptToggle) dmEncryptToggle.addEventListener('change', async () => {
-    const on = !!dmEncryptToggle.checked;
-    const partner = dmTarget || (dmThreadSelect && dmThreadSelect.value) || '';
-    if (!partner) { dmEncryptToggle.checked = false; return; }
-    if (!on) {
-      dmKeys.delete(partner);
-      try { localStorage.removeItem(`ac:dmkey:${partner}`); } catch (_) {}
-      return;
-    }
-    let pass = null;
-    try { pass = localStorage.getItem(`ac:dmkey:${partner}`) || null; } catch (_) {}
-    if (!pass) {
-      // Open modal to set secret instead of prompt
-      dmEncryptToggle.checked = false;
-      showDmKeyModal(partner);
-      return;
-    }
-    const key = await deriveKey(pass);
-    dmKeys.set(partner, key);
   });
 
   // Load any saved DM keys
