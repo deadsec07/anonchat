@@ -103,7 +103,7 @@ class AnonChatStack extends Stack {
         VAPID_SUBJECT: process.env.VAPID_SUBJECT || 'mailto:admin@example.com',
       },
     });
-    table.grantReadData(presignFn);
+    table.grantReadWriteData(presignFn);
     attachBucket.grantReadWrite(presignFn);
 
     // WebSocket API (low-level Cfn resources to avoid alpha modules)
@@ -355,6 +355,10 @@ class AnonChatStack extends Stack {
         cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
         compress: true,
       },
+      errorResponses: [
+        { httpStatus: 403, responsePagePath: '/index.html', responseHttpStatus: 200, ttl: Duration.seconds(0) },
+        { httpStatus: 404, responsePagePath: '/index.html', responseHttpStatus: 200, ttl: Duration.seconds(0) },
+      ],
       additionalBehaviors: {
         '/index.html': {
           origin: s3Origin,
