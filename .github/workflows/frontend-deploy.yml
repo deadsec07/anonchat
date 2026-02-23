@@ -64,6 +64,7 @@ jobs:
           aws s3 sync frontend s3://${{ steps.cf.outputs.bucket }}/ \
             --delete \
             --exclude index.html \
+            --exclude config.js \
             --cache-control max-age=31536000,public
 
       - name: Upload index.html (no cache)
@@ -72,9 +73,15 @@ jobs:
           aws s3 cp frontend/index.html s3://${{ steps.cf.outputs.bucket }}/index.html \
             --cache-control no-store
 
+      - name: Upload config.js (no cache)
+        if: ${{ steps.cf.outputs.stack_missing != 'true' }}
+        run: |
+          aws s3 cp frontend/config.js s3://${{ steps.cf.outputs.bucket }}/config.js \
+            --cache-control no-store
+
       - name: Invalidate CloudFront (index)
         if: ${{ steps.cf.outputs.stack_missing != 'true' && steps.cf.outputs.dist_id != '' }}
         run: |
           aws cloudfront create-invalidation \
             --distribution-id ${{ steps.cf.outputs.dist_id }} \
-            --paths "/" "/index.html"
+            --paths "/" "/index.html" "/config.js" "/sw.js"
