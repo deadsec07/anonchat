@@ -98,6 +98,7 @@
   const btnLoginLobby = document.getElementById('btnLoginLobby');
   const btnLogout = $('btnLogout');
   const btnLoginClose = document.getElementById('btnLoginClose');
+  const loginLoading = document.getElementById('loginLoading');
   const rememberSession = $('rememberSession');
   const statusEl = $('status');
   const loginError = $('loginError');
@@ -520,6 +521,19 @@
       setTimeout(() => { try { newAliasInput.focus(); newAliasInput.select(); } catch (_) {} }, 0);
     }
     if (aliasError) aliasError.textContent = '';
+  }
+
+  function setLoginLoading(on) {
+    const show = !!on;
+    try {
+      if (loginLoading) { loginLoading.hidden = !show; loginLoading.style.display = show ? '' : 'none'; }
+      if (btnLogin) btnLogin.disabled = show;
+      if (btnLoginLobby) btnLoginLobby.disabled = show;
+      if (loginRoom) loginRoom.disabled = show;
+      if (loginAlias) loginAlias.disabled = show;
+      if (loginPrivate) loginPrivate.disabled = show;
+      if (loginCode) loginCode.disabled = show || !(loginPrivate && loginPrivate.checked);
+    } catch (_) {}
   }
   function hideAliasModal() {
     if (!aliasOverlay) return;
