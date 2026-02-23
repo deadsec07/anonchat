@@ -11,6 +11,7 @@ const origins = require('aws-cdk-lib/aws-cloudfront-origins');
 const route53 = require('aws-cdk-lib/aws-route53');
 const targets = require('aws-cdk-lib/aws-route53-targets');
 const acm = require('aws-cdk-lib/aws-certificatemanager');
+const iam = require('aws-cdk-lib/aws-iam');
 
 class AnonChatStack extends Stack {
   constructor(scope, id, props = {}) {
@@ -286,6 +287,30 @@ class AnonChatStack extends Stack {
         principal: 'apigateway.amazonaws.com',
         sourceArn,
       });
+    });
+
+    // Grant Lambdas permission to post to connections (execute-api:ManageConnections)
+    const manageConnectionsActions = ['execute-api:ManageConnections'];
+    // Restrict to posting to WebSocket connections for any stage
+    const manageConnectionsResource = `arn:aws:execute-api:${this.region}:${this.account}:${api.ref}/*/POST/@connections/*`;
+    [
+      connectFn,
+      disconnectFn,
+      joinFn,
+      sendFn,
+      dmFn,
+      roomsFn,
+      whoFn,
+      typingFn,
+      presignFn,
+      setCodeFn,
+      pushSubFn,
+    ].forEach((fn) => {
+      fn.addToRolePolicy(new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: manageConnectionsActions,
+        resources: [manageConnectionsResource],
+      }));
     });
 
     // Ensure deployment order
