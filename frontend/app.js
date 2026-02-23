@@ -1649,8 +1649,7 @@
     if (loginAlias && !loginAlias.value) loginAlias.value = a || localStorage.getItem('ac:lastAlias') || '';
     const remember = localStorage.getItem('ac:remember') === '1';
     if (rememberSession) rememberSession.checked = remember;
-    const wasLogged = sessionStorage.getItem('ac:loggedIn') === '1';
-    if ((r && a && auto === '1') || wasLogged) {
+    if ((r && a && auto === '1') || remember) {
       window.__quietJoin = true;
       doLogin();
     } else {
