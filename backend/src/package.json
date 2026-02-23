@@ -1,0 +1,11 @@
+{
+  "name": "anonchat-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lambda handlers for anonchat (packaged with aws-sdk v2)",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "aws-sdk": "^2.1488.0"
+  }
+}
+
