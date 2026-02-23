@@ -17,7 +17,11 @@ exports.handler = async (event) => {
 
   const text = (body.text || '').toString().trim();
   const to = (body.to || '').toString().trim();
-  if (!text) return { statusCode: 400, body: 'Empty message' };
+  const enc = (body.enc && typeof body.enc === 'object' && body.enc.c && body.enc.iv)
+    ? { c: String(body.enc.c), iv: String(body.enc.iv) }
+    : null;
+  const hasAttachment = !!(body.attachment && typeof body.attachment === 'object');
+  if (!text && !enc && !hasAttachment) return { statusCode: 400, body: 'Empty message' };
   if (!to) return { statusCode: 400, body: 'Missing recipient' };
   if (text.length > 512) return { statusCode: 400, body: 'Message too long' };
 
@@ -64,7 +68,8 @@ exports.handler = async (event) => {
       from: me.connectionId,
       alias: me.alias || 'anon',
       to,
-      text,
+      text: text || '',
+      enc: enc || undefined,
       attachment: attachment || undefined,
       ts: Date.now(),
     };
