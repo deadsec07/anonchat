@@ -137,6 +137,20 @@
   let lastAttachFile = null;
   let lastDmAttachFile = null;
   const dmKeys = new Map(); // alias -> CryptoKey
+  function reflectDmEncryptState(partner) {
+    try {
+      if (!btnDmSetKey) return;
+      const name = partner || dmTarget || (dmThreadSelect && dmThreadSelect.value) || '';
+      const on = !!(name && dmKeys.get(name));
+      btnDmSetKey.textContent = on ? 'Encrypt: ON' : 'Encrypt';
+      btnDmSetKey.classList.remove('bg-slate-800/80','border-slate-700','text-slate-200','bg-emerald-600','border-emerald-400','text-slate-900');
+      if (on) {
+        btnDmSetKey.classList.add('bg-emerald-600','border-emerald-400','text-slate-900');
+      } else {
+        btnDmSetKey.classList.add('bg-slate-800/80','border-slate-700','text-slate-200');
+      }
+    } catch (_) {}
+  }
 
   // Idle auto-disconnect to reduce WS minutes
   const IDLE_MS = 5 * 60 * 1000; // 5 minutes; adjust via code if needed
@@ -183,6 +197,7 @@
     inputEl.placeholder = dmTarget ? `DM to ${dmTarget}` : 'Type a message';
     try { typingPeers.clear(); } catch (_) {}
     updateTypingStatus();
+    reflectDmEncryptState(name);
   }
 
   function myAliasWithSuffix() {
@@ -313,7 +328,7 @@
       dmUnread.set(name, 0);
       updateDmsButton();
     }
-    // reflect encryption state if needed (toggle removed)
+    reflectDmEncryptState(name);
   }
 
   function hideDmThread() {
@@ -746,6 +761,7 @@
     ws = socket;
     socket.onopen = (ev) => {
       setStatus('connected', '#22c55e');
+      setLoginLoading(false);
       hideOverlay();
       hideLanding();
       showApp();
@@ -783,6 +799,7 @@
     };
     socket.onclose = (ev) => {
       setStatus('disconnected', '#ef4444');
+      setLoginLoading(false);
       try { console.warn('[ws close]', ev && (ev.code + ' ' + ev.reason)); } catch (_) {}
       joined = false;
       myAliasServer = '';
@@ -798,7 +815,7 @@
       updateLobbyButton();
       showReconnectButton();
     };
-    socket.onerror = (e) => { try { console.error('[ws error]', e); } catch (_) {} setStatus('error', '#ef4444'); };
+    socket.onerror = (e) => { try { console.error('[ws error]', e); } catch (_) {} setStatus('error', '#ef4444'); setLoginLoading(false); };
     socket.onmessage = async (ev) => {
       try {
         const msg = JSON.parse(ev.data);
@@ -1096,22 +1113,15 @@
       } catch (_) {}
     }
     try { sessionStorage.setItem('ac:loggedIn', '1'); } catch (_) {}
-    hideOverlay();
+    setLoginLoading(true);
     if (btnLogout) btnLogout.classList.add('hidden');
-    // Disable button while connecting
-    if (btnLogin) {
-      btnLogin.disabled = true;
-      btnLogin.textContent = 'Connecting…';
-    }
+    if (btnLogin) btnLogin.textContent = 'Connecting…';
     const startConnect = () => {
       connectAndJoin();
       // Re-enable UI shortly (in case of quick failure)
       setTimeout(() => {
-        if (btnLogin) {
-          btnLogin.disabled = false;
-          btnLogin.textContent = 'Login';
-        }
-      }, 1200);
+        if (btnLogin) btnLogin.textContent = 'Login';
+      }, 2000);
     };
     startConnect();
   }
@@ -1408,6 +1418,7 @@
     const key = await deriveKey(pass);
     dmKeys.set(partner, key);
     try { localStorage.setItem(`ac:dmkey:${partner}`, pass); } catch (_) {}
+    reflectDmEncryptState(partner);
     hideDmKeyModal();
   });
 
@@ -1418,7 +1429,7 @@
       const partner = k.replace('ac:dmkey:','');
       const pass = localStorage.getItem(k);
       if (pass) {
-        deriveKey(pass).then((key) => { dmKeys.set(partner, key); }).catch(() => {});
+        deriveKey(pass).then((key) => { dmKeys.set(partner, key); reflectDmEncryptState(partner); }).catch(() => {});
       }
     }
   } catch (_) {}
@@ -1564,14 +1575,26 @@
     } catch (e) {}
   });
   if (dmAttachPreviewRemove) dmAttachPreviewRemove.addEventListener('click', () => { clearPendingAttachment(true); if (dmFileAttach) dmFileAttach.value=''; });
-  if (dmSend) dmSend.addEventListener('click', () => {
-    const partner = dmTarget;
+  if (dmSend) dmSend.addEventListener('click', async () => {
+    const partner = dmTarget || (dmThreadSelect && dmThreadSelect.value) || '';
     if (!partner || partner === myAliasWithSuffix()) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
     const text = (dmInput && dmInput.value || '').toString().trim();
-    if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ action: 'dm', to: partner, text }));
+    if (!text && !pendingDmAttachment) return;
+    let payload = { action: 'dm', to: partner, text };
+    try {
+      const key = dmKeys.get(partner);
+      if (key && text) {
+        const e = await encryptText(key, text);
+        payload = { action: 'dm', to: partner, enc: e, text: '' };
+      }
+    } catch (_) {}
+    if (pendingDmAttachment) payload.attachment = pendingDmAttachment;
+    ws.send(JSON.stringify(payload));
     try { sendTyping(false, partner); } catch (_) {}
     if (dmInput) dmInput.value = '';
+    // Clear DM pending attachment after send
+    clearPendingAttachment(true);
   });
   if (dmInput) dmInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); if (dmSend) dmSend.click(); } });
   if (dmInput) dmInput.addEventListener('input', () => { const has = !!dmInput.value.trim(); if (dmTarget) sendTyping(has, dmTarget); });
