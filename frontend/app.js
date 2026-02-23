@@ -775,10 +775,7 @@
     ws = socket;
     socket.onopen = (ev) => {
       setStatus('connected', '#22c55e');
-      setLoginLoading(false);
-      hideOverlay();
-      hideLanding();
-      showApp();
+      // Keep overlays visible until server confirms join
       idleClosed = false;
       hideReconnectButton();
       markActivity();
@@ -793,22 +790,7 @@
         }
       } catch (_) {}
       try { sessionStorage.setItem('ac:lastJoinTs', String(now)); } catch (_) {}
-      joined = true;
-      joinEl.hidden = true;
-      composerEl.hidden = false;
-      hideComposerBanners();
-      resetMessagesForRoom();
-      hideDmThread();
-      hideDmsPanel();
-      inputEl.focus();
-      if (btnLogout) btnLogout.classList.remove('hidden');
-      updateCurrentRoomBadge();
-      updateLobbyButton();
-      // Load local history for this room
-      loadLocalHistoryForRoom(room);
-      // On first join, jump to bottom
-      stickToBottom = true;
-      scrollToBottom(true);
+      // Do not flip UI to chat until 'me: joined' arrives
       setupPwaAndPush();
     };
     socket.onclose = (ev) => {
@@ -876,6 +858,13 @@
               members = msg.count;
               setStatus('connected', '#22c55e');
             }
+          }
+          // Invalid room code: show inline error in code modal and keep asking
+          if (msg.type === 'system' && msg.event === 'error' && /Invalid room code/i.test(msg.text || '')) {
+            if (roomCodeOverlay) { roomCodeOverlay.hidden = false; roomCodeOverlay.style.display = ''; }
+            try { const err = document.getElementById('roomJoinCodeError'); if (err) err.textContent = 'Invalid room code'; } catch (_) {}
+            if (roomJoinCodeInput) { try { roomJoinCodeInput.focus(); } catch (_) {} }
+            return;
           }
         } else if (msg && msg.type === 'rooms') {
           // Render rooms list panel, or fallback to alert if panel missing
@@ -994,16 +983,37 @@
             if (msg.typing) typingPeers.set(name, Date.now() + 3000); else typingPeers.delete(name);
             updateTypingStatus();
           } catch (_) {}
-        } else if (msg && msg.type === 'me' && msg.event === 'joined') {
-      try {
-        if (typeof msg.alias === 'string' && msg.alias) {
-          myAliasServer = msg.alias;
-          updateCurrentRoomBadge();
-        }
-        // Now that server confirmed join, request users list
-        try { requestUsers(); } catch (_) {}
-      } catch (_) {}
-    } else if (msg && msg.type === 'presign') {
+    } else if (msg && msg.type === 'me' && msg.event === 'joined') {
+          try {
+            if (typeof msg.alias === 'string' && msg.alias) {
+              myAliasServer = msg.alias;
+              updateCurrentRoomBadge();
+            }
+            // Now that server confirmed join, flip UI to chat
+            setLoginLoading(false);
+            hideOverlay();
+            hideLanding();
+            showApp();
+            joined = true;
+            joinEl.hidden = true;
+            composerEl.hidden = false;
+            hideComposerBanners();
+            resetMessagesForRoom();
+            hideDmThread();
+            hideDmsPanel();
+            inputEl.focus();
+            if (btnLogout) btnLogout.classList.remove('hidden');
+            updateCurrentRoomBadge();
+            updateLobbyButton();
+            // Load local history for this room
+            loadLocalHistoryForRoom(room);
+            // On first join, jump to bottom
+            stickToBottom = true;
+            scrollToBottom(true);
+            // Request users list after confirmed join
+            try { requestUsers(); } catch (_) {}
+          } catch (_) {}
+        } else if (msg && msg.type === 'presign') {
       handlePresign(msg);
     }
       } catch (_) {}
@@ -1229,12 +1239,13 @@
     if (!room || !ws || ws.readyState !== WebSocket.OPEN) return;
     const code = (roomJoinCodeInput && roomJoinCodeInput.value || '').toString().trim().slice(0, 32);
     if (!code) return;
+    try { const err = document.getElementById('roomJoinCodeError'); if (err) err.textContent = ''; } catch (_) {}
     resetMessagesForRoom();
     ws.send(JSON.stringify({ action: 'join', roomId: room, alias, clientId: getClientId(), code }));
     updateCurrentRoomBadge();
     updateLobbyButton();
     loadLocalHistoryForRoom(room);
-    if (roomCodeOverlay) { roomCodeOverlay.hidden = true; roomCodeOverlay.style.display = 'none'; }
+    // Keep the code overlay open until server confirms join or returns error
   });
   if (roomJoinCodeInput) roomJoinCodeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); if (btnRoomCodeJoin) btnRoomCodeJoin.click(); } });
 
