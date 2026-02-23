@@ -1,5 +1,76 @@
 /* Minimal custom styling on top of Tailwind */
 ul#messages { list-style: none; padding: 0; margin: 0; }
-ul#messages li { border-radius: 0.75rem; border: 1px solid rgba(51,65,85,.6); background: rgba(2,6,23,.7); padding: .5rem .75rem; }
+ul#messages li { border-radius: 0.75rem; border: 1px solid rgba(51,65,85,.5); background: rgba(2,6,23,.6); padding: .65rem .9rem; box-shadow: 0 1px 0 rgba(15,23,42,.4) inset, 0 1px 10px rgba(0,0,0,.15); }
 ul#messages li.system { border-style: dashed; opacity: .8; }
-ul#messages li .meta { font-size: .75rem; color: rgb(148,163,184); margin-bottom: .125rem; }
+ul#messages li .meta { font-size: .74rem; color: rgb(148,163,184); margin-bottom: .15rem; letter-spacing: .01em; }
+ul#messages li.dm { border-color: rgba(251,191,36,.6); background: rgba(2,6,23,.6); }
+
+/* Fallback styles if Tailwind CDN fails (baseline look) */
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif; }
+#join input { border: 1px solid #334155; background: rgba(30,41,59,.8); color: #e2e8f0; border-radius: 0.6rem; padding: .55rem .75rem; }
+#actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+#actions button { border-radius: .6rem; border: 1px solid #334155; padding: .5rem .9rem; cursor: pointer; }
+#btnJoin { background: linear-gradient(135deg,#10b981,#22d3ee); color: #0b1324; border-color: rgba(16,185,129,.35); box-shadow: 0 2px 10px rgba(0,0,0,.2); }
+#btnCopyLink, #btnRooms { background: rgba(30,41,59,.7); color: #e2e8f0; }
+#composer { backdrop-filter: blur(6px); }
+#send { background: linear-gradient(135deg,#10b981,#22d3ee); color: #0b1324; border-radius: 999px; padding: .55rem 1rem; border: 1px solid rgba(16,185,129,.35); }
+#dmBar { box-shadow: 0 4px 14px rgba(251,191,36,.12), inset 0 1px 0 rgba(250,204,21,.15); }
+ul#messages li.dm .meta { color: rgb(245, 208, 66); }
+.mention { color: #93c5fd; background: rgba(59,130,246,.12); padding: 0 .2rem; border-radius: .25rem; }
+.mention.me { color: #fca5a5; background: rgba(239,68,68,.12); }
+.reply-quote { font-size: .78rem; color: #cbd5e1; border-left: 2px solid rgba(6,182,212,.6); padding-left: .5rem; margin-bottom: .25rem; opacity: .9; }
+.attachment img { max-width: 100%; border-radius: .5rem; margin-top: .25rem; }
+.attachment .meta { font-size: .74rem; color: #94a3b8; }
+.attach-chip { box-shadow: 0 1px 0 rgba(15,23,42,.35) inset; }
+.attach-chip button { line-height: 1; color: #e2e8f0; width: 1.1rem; height: 1.1rem; }
+/* Preview overlays */
+#attachPreview button, #dmAttachPreview button { color: #e2e8f0; }
+
+/* Mention dropdown */
+#mentionList li { display: flex; align-items: center; justify-content: space-between; padding: .5rem .75rem; cursor: pointer; }
+#mentionList li:hover { background: rgba(30,41,59,.7); }
+#mentionList li.active { background: rgba(20,83,45,.35); }
+
+#typingStatus { min-height: 1rem; opacity: .9; }
+
+/* Ensure hidden elements never show due to inline styles or Tailwind overrides */
+#dmBar[hidden], #replyBar[hidden], #dmsPanel[hidden], #dmThreadPanel[hidden], #aliasOverlay[hidden], #loginOverlay[hidden], #roomsPanel[hidden], #usersPanel[hidden] {
+  display: none !important;
+}
+
+/* Fallback for new-message badge if Tailwind unavailable */
+#newMsgBadge { border: 1px solid rgba(16,185,129,.35); box-shadow: 0 6px 18px rgba(16,185,129,.15); }
+
+/* Generic disabled button look */
+button:disabled { opacity: .55; cursor: not-allowed; }
+
+/* Prominent pulse for primary actions (Chat now) */
+@keyframes btnGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(16,185,129,0.0), 0 1px 6px rgba(0,0,0,.15);
+    filter: brightness(1);
+  }
+  50% {
+    box-shadow: 0 0 28px 8px rgba(16,185,129,0.55), 0 2px 12px rgba(0,0,0,.2);
+    filter: brightness(1.03);
+  }
+}
+@keyframes btnBgPulse {
+  0%, 100% { background-color: #ffffff; }
+  50% { background-color: #d1fae5; /* emerald-100 tint */ }
+}
+.btn-attn {
+  animation: btnBgPulse 1.8s ease-in-out infinite, btnGlow 1.6s ease-in-out infinite;
+}
+.btn-attn::before { display: none; }
+
+/* DMs button attention pulse when unread */
+@keyframes dmPulse {
+  0%, 100% { background-color: rgba(16,185,129,.18); box-shadow: 0 0 0 0 rgba(16,185,129,.32); }
+  50% { background-color: rgba(16,185,129,.35); box-shadow: 0 0 12px 2px rgba(16,185,129,.32); }
+}
+#btnDmsHdr.attn {
+  border-color: rgba(16,185,129,.6) !important;
+  color: #a7f3d0 !important;
+  animation: dmPulse 1.2s ease-in-out infinite;
+}

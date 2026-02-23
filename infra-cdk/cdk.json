@@ -1,6 +1,3 @@
 {
-  "app": "node bin/anon-chat.js",
-  "context": {
-    "@aws-cdk/core:bootstrapQualifier": "acqt"
-  }
+  "app": "node bin/anon-chat.js"
 }

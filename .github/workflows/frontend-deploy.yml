@@ -15,6 +15,7 @@ jobs:
     env:
       AWS_REGION: ${{ github.event.inputs.region || 'us-east-1' }}
       AWS_ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_TO_ASSUME }}
+      STACK_NAME: ${{ vars.STACK_NAME || 'anonchat' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,16 +38,19 @@ jobs:
       - name: Discover infra outputs
         id: cf
         run: |
-          ws_url=$(aws cloudformation describe-stacks --stack-name anonchat \
+          ws_url=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
             --query "Stacks[0].Outputs[?OutputKey=='WebSocketUrl'].OutputValue" --output text)
-          bucket=$(aws cloudformation describe-stacks --stack-name anonchat \
+          bucket=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
             --query "Stacks[0].Outputs[?OutputKey=='WebsiteBucketName'].OutputValue" --output text)
+          dist_id=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='CloudFrontDistributionId'].OutputValue" --output text)
           echo "ws_url=$ws_url" >> $GITHUB_OUTPUT
           echo "bucket=$bucket" >> $GITHUB_OUTPUT
+          echo "dist_id=$dist_id" >> $GITHUB_OUTPUT
 
       - name: Generate config.js
         run: |
-          echo "window.CONFIG = { wsUrl: '${{ steps.cf.outputs.ws_url }}' };" > frontend/config.js
+          echo "window.CONFIG = { wsUrl: '${{ steps.cf.outputs.ws_url }}', vapidPublicKey: '${{ secrets.VAPID_PUBLIC_KEY }}' };" > frontend/config.js
 
       - name: Sync static assets (cacheable)
         run: |
@@ -59,3 +63,10 @@ jobs:
         run: |
           aws s3 cp frontend/index.html s3://${{ steps.cf.outputs.bucket }}/index.html \
             --cache-control no-store
+
+      - name: Invalidate CloudFront (index)
+        if: ${{ steps.cf.outputs.dist_id != '' }}
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ steps.cf.outputs.dist_id }} \
+            --paths "/" "/index.html"
