@@ -1,13 +1,12 @@
 name: Infra CDK Deploy
 
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches: [ "main" ]
+  workflow_dispatch: {}
 
 jobs:
   deploy:
-    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -45,7 +44,7 @@ jobs:
       - name: Install CDK and deps
         working-directory: infra-cdk
         run: |
-          npm ci
+          if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
           npx cdk --version
 
       - name: CDK Bootstrap (safe to repeat)
