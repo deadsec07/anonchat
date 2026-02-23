@@ -1,8 +1,6 @@
-name: Frontend Deploy
+name: Frontend Deploy (manual)
 
 on:
-  push:
-    branches: [ "main" ]
   workflow_dispatch: {}
 
 jobs:
@@ -56,7 +54,17 @@ jobs:
       - name: Generate config.js
         if: ${{ steps.cf.outputs.stack_missing != 'true' }}
         run: |
-          echo "window.CONFIG = { wsUrl: '${{ steps.cf.outputs.ws_url }}', vapidPublicKey: '${{ secrets.VAPID_PUBLIC_KEY }}' };" > frontend/config.js
+          set -euo pipefail
+          ws="${{ steps.cf.outputs.ws_url }}"
+          # Normalize to ensure trailing /$default is present
+          case "$ws" in
+            *"/\$default") ;;
+            */) ws="${ws}\$default" ;;
+            *) ws="${ws}/\$default" ;;
+          esac
+          # Escape $ for safe shell printing
+          ws_escaped=$(printf '%s' "$ws" | sed 's/[$]/\\$/g')
+          printf "window.CONFIG = { wsUrl: '%s', vapidPublicKey: '%s' };\n" "$ws_escaped" "${{ secrets.VAPID_PUBLIC_KEY }}" > frontend/config.js
 
       - name: Sync static assets (cacheable)
         if: ${{ steps.cf.outputs.stack_missing != 'true' }}
