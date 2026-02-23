@@ -1,5 +1,12 @@
 (function () {
   const $ = (id) => document.getElementById(id);
+  // Migrate old hash route (#join) to /chat
+  try {
+    if ((location.hash || '').toLowerCase() === '#join') {
+      const qs = location.search || '';
+      history.replaceState(null, '', '/chat' + qs);
+    }
+  } catch (_) {}
   const appShell = $('appShell');
   const messagesEl = $('messages');
   const joinEl = $('join');
@@ -279,6 +286,7 @@
 
   function openDmThread(name) {
     if (!dmThreadPanel || !dmThreadList || !dmThreadTitle) return;
+    try { if (roomsPanel) roomsPanel.hidden = true; if (usersPanel) usersPanel.hidden = true; } catch (_) {}
     dmThreadTitle.textContent = name;
     dmThreadList.innerHTML = '';
     const thread = ensureThread(name);
