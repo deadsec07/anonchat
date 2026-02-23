@@ -721,9 +721,11 @@
       alert('Missing wsUrl in frontend/config.js');
       return;
     }
+    try { if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) { ws.close(); } } catch (_) {}
     setStatus('connecting…', '#fbbf24');
-    ws = new WebSocket(window.CONFIG.wsUrl);
-    ws.onopen = () => {
+    const socket = new WebSocket(window.CONFIG.wsUrl);
+    ws = socket;
+    socket.onopen = (ev) => {
       setStatus('connected', '#22c55e');
       hideOverlay();
       hideLanding();
@@ -736,7 +738,11 @@
       try { lastJoinTs = parseInt(sessionStorage.getItem('ac:lastJoinTs') || '0', 10) || 0; } catch (_) {}
       const now = Date.now();
       const isQuickReconnect = lastJoinTs && (now - lastJoinTs) < 10000;
-      ws.send(JSON.stringify({ action: 'join', roomId: room, alias, clientId: getClientId(), code: myRoomCode || undefined, quiet: !!isQuickReconnect }));
+      try {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ action: 'join', roomId: room, alias, clientId: getClientId(), code: myRoomCode || undefined, quiet: !!isQuickReconnect }));
+        }
+      } catch (_) {}
       try { sessionStorage.setItem('ac:lastJoinTs', String(now)); } catch (_) {}
       joined = true;
       joinEl.hidden = true;
@@ -754,11 +760,9 @@
       // On first join, jump to bottom
       stickToBottom = true;
       scrollToBottom(true);
-      // Seed users for mentions/DMs
-      requestUsers();
       setupPwaAndPush();
     };
-    ws.onclose = (ev) => {
+    socket.onclose = (ev) => {
       setStatus('disconnected', '#ef4444');
       try { console.warn('[ws close]', ev && (ev.code + ' ' + ev.reason)); } catch (_) {}
       joined = false;
@@ -775,11 +779,11 @@
       updateLobbyButton();
       showReconnectButton();
     };
-    ws.onerror = (e) => { try { console.error('[ws error]', e); } catch (_) {} setStatus('error', '#ef4444'); };
-    ws.onmessage = async (ev) => {
+    socket.onerror = (e) => { try { console.error('[ws error]', e); } catch (_) {} setStatus('error', '#ef4444'); };
+    socket.onmessage = async (ev) => {
       try {
         const msg = JSON.parse(ev.data);
-        if (msg && (msg.type === 'message' || msg.type === 'system')) {
+        if (msg && (msg.type === 'message' || (msg.type === 'system' && msg.event !== 'typing'))) {
           appendMessage(msg);
         } else if (msg && msg.type === 'dm') {
           const mine = myAliasWithSuffix();
@@ -929,22 +933,24 @@
           usersPanel.hidden = false;
         }
         } else if (msg && msg.type === 'system' && msg.event === 'typing') {
-      try {
-        const name = String(msg.alias || '');
-        const mine = myAliasWithSuffix();
-        // Only show DM typing directed to me and from my current DM target
-        if (!name || name === mine) return;
-        if (!msg.to || String(msg.to) !== mine) return;
-        if (!dmTarget || String(dmTarget) !== name) return;
-        if (msg.typing) typingPeers.set(name, Date.now() + 3000); else typingPeers.delete(name);
-        updateTypingStatus();
-      } catch (_) {}
-    } else if (msg && msg.type === 'me' && msg.event === 'joined') {
+          try {
+            const name = String(msg.alias || '');
+            const mine = myAliasWithSuffix();
+            // Only show DM typing directed to me and from my current DM target
+            if (!name || name === mine) return;
+            if (!msg.to || String(msg.to) !== mine) return;
+            if (!dmTarget || String(dmTarget) !== name) return;
+            if (msg.typing) typingPeers.set(name, Date.now() + 3000); else typingPeers.delete(name);
+            updateTypingStatus();
+          } catch (_) {}
+        } else if (msg && msg.type === 'me' && msg.event === 'joined') {
       try {
         if (typeof msg.alias === 'string' && msg.alias) {
           myAliasServer = msg.alias;
           updateCurrentRoomBadge();
         }
+        // Now that server confirmed join, request users list
+        try { requestUsers(); } catch (_) {}
       } catch (_) {}
     } else if (msg && msg.type === 'presign') {
       handlePresign(msg);
@@ -1240,13 +1246,17 @@
 
   // Toggle helpers to avoid stacked panels
   function toggleRooms() {
-  if (!roomsPanel) return requestRooms();
+    if (!roomsPanel) return requestRooms();
     if (!roomsPanel.hidden) { roomsPanel.hidden = true; return; }
+    if (usersPanel) usersPanel.hidden = true;
+    if (dmsPanel) dmsPanel.hidden = true;
     requestRooms();
   }
   function toggleUsers() {
     if (!usersPanel) return requestUsers();
     if (!usersPanel.hidden) { usersPanel.hidden = true; return; }
+    if (roomsPanel) roomsPanel.hidden = true;
+    if (dmsPanel) dmsPanel.hidden = true;
     requestUsers();
   }
 
@@ -1428,6 +1438,8 @@
       const xhr = new XMLHttpRequest();
       xhr.open('PUT', msg.uploadUrl);
       xhr.setRequestHeader('Content-Type', file.type);
+      xhr.withCredentials = false;
+      xhr.timeout = 60000;
       xhr.upload.onprogress = (e) => {
         if (!prog) return;
         if (e.lengthComputable) {
@@ -1469,6 +1481,18 @@
           };
         }
       };
+      xhr.ontimeout = () => {
+        if (prog) prog.textContent = '· timeout';
+        if (retry) {
+          retry.hidden = false;
+          retry.onclick = () => {
+            ws && ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ action: 'presign', name: file.name, type: file.type, size: file.size, scope: isDm ? 'dm' : 'room' }));
+            retry.hidden = true;
+            if (prog) prog.textContent = '· retrying…';
+          };
+        }
+      };
+      if (prog) prog.textContent = '· uploading…';
       xhr.send(file);
     } catch (_) {}
   }
