@@ -110,19 +110,18 @@ jobs:
 
       - name: Generate config.js
         if: ${{ steps.cf.outputs.stack_missing != 'true' }}
+        env:
+          RAW_WS_URL: ${{ steps.cf.outputs.ws_url }}
+          VAPID_PK: ${{ secrets.VAPID_PUBLIC_KEY }}
         run: |
           set -euo pipefail
-          # Capture raw URL without shell expansion of $default
-          ws=$(cat <<'EOF'
-${{ steps.cf.outputs.ws_url }}
-EOF
-)
+          ws="$RAW_WS_URL"
           suf='/$default'
           if [[ "$ws" != *"$suf" ]]; then
             if [[ "$ws" == */ ]]; then ws="${ws}\$default"; else ws="${ws}/\$default"; fi
           fi
           ws_escaped=$(printf '%s' "$ws" | sed 's/[$]/\\$/g')
-          printf "window.CONFIG = { wsUrl: '%s', vapidPublicKey: '%s' };\n" "$ws_escaped" "${{ secrets.VAPID_PUBLIC_KEY }}" > frontend/config.js
+          printf "window.CONFIG = { wsUrl: '%s', vapidPublicKey: '%s' };\n" "$ws_escaped" "$VAPID_PK" > frontend/config.js
 
       - name: Sync static assets (cacheable)
         if: ${{ steps.cf.outputs.stack_missing != 'true' }}
