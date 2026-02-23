@@ -7,6 +7,14 @@
       history.replaceState(null, '', '/chat' + qs);
     }
   } catch (_) {}
+
+  // Panel visibility helpers to prevent overlap
+  function isVisible(el) { try { return el && !el.hidden && el.style.display !== 'none'; } catch (_) { return false; } }
+  function hidePanel(el) { try { if (!el) return; el.hidden = true; el.style.display = 'none'; } catch (_) {} }
+  function showPanel(el) { try { if (!el) return; el.hidden = false; el.style.display = ''; } catch (_) {} }
+  function hideAllPanels() { hidePanel(roomsPanel); hidePanel(usersPanel); hidePanel(dmsPanel); hideDmThread(); }
+  function openRoomsPanel() { hideAllPanels(); showPanel(roomsPanel); }
+  function openUsersPanel() { hideAllPanels(); showPanel(usersPanel); }
   const appShell = $('appShell');
   const messagesEl = $('messages');
   const joinEl = $('join');
@@ -203,8 +211,7 @@
 
   function openDmsPanel() {
     if (!dmsPanel || !dmsList) return;
-    if (usersPanel) usersPanel.hidden = true;
-    if (roomsPanel) roomsPanel.hidden = true;
+    hideAllPanels();
     dmsList.innerHTML = '';
     const items = Array.from(dmThreads.keys());
     if (!items.length) {
@@ -232,8 +239,7 @@
         dmsList.appendChild(li);
       }
     }
-    dmsPanel.hidden = false;
-    dmsPanel.style.display = '';
+    showPanel(dmsPanel);
   }
 
   function updateDmThreadSelect(current) {
@@ -900,7 +906,7 @@
                 roomsList.appendChild(li);
               }
             }
-            roomsPanel.hidden = false;
+            showPanel(roomsPanel);
           } else {
             const lines = [];
             lines.push(`Total users: ${msg.total || 0}`);
@@ -919,8 +925,7 @@
             if (total > 0) { members = total; setStatus('connected', '#22c55e'); }
           } catch (_) {}
           if (usersPanel && usersList) {
-            if (roomsPanel) roomsPanel.hidden = true;
-            if (dmsPanel) dmsPanel.hidden = true;
+            openUsersPanel();
             usersList.innerHTML = '';
             for (const name of usersInRoom) {
               const li = document.createElement('li');
@@ -1257,16 +1262,14 @@
   // Toggle helpers to avoid stacked panels
   function toggleRooms() {
     if (!roomsPanel) return requestRooms();
-    if (!roomsPanel.hidden) { roomsPanel.hidden = true; return; }
-    if (usersPanel) usersPanel.hidden = true;
-    if (dmsPanel) dmsPanel.hidden = true;
+    if (isVisible(roomsPanel)) { hideAllPanels(); return; }
+    openRoomsPanel();
     requestRooms();
   }
   function toggleUsers() {
     if (!usersPanel) return requestUsers();
-    if (!usersPanel.hidden) { usersPanel.hidden = true; return; }
-    if (roomsPanel) roomsPanel.hidden = true;
-    if (dmsPanel) dmsPanel.hidden = true;
+    if (isVisible(usersPanel)) { hideAllPanels(); return; }
+    openUsersPanel();
     requestUsers();
   }
 
