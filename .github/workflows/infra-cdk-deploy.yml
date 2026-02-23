@@ -112,12 +112,15 @@ jobs:
         if: ${{ steps.cf.outputs.stack_missing != 'true' }}
         run: |
           set -euo pipefail
-          ws="${{ steps.cf.outputs.ws_url }}"
-          case "$ws" in
-            *"/\$default") ;;
-            */) ws="${ws}\$default" ;;
-            *) ws="${ws}/\$default" ;;
-          esac
+          # Capture raw URL without shell expansion of $default
+          ws=$(cat <<'EOF'
+${{ steps.cf.outputs.ws_url }}
+EOF
+)
+          suf='/$default'
+          if [[ "$ws" != *"$suf" ]]; then
+            if [[ "$ws" == */ ]]; then ws="${ws}\$default"; else ws="${ws}/\$default"; fi
+          fi
           ws_escaped=$(printf '%s' "$ws" | sed 's/[$]/\\$/g')
           printf "window.CONFIG = { wsUrl: '%s', vapidPublicKey: '%s' };\n" "$ws_escaped" "${{ secrets.VAPID_PUBLIC_KEY }}" > frontend/config.js
 
