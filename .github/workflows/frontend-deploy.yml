@@ -1,13 +1,15 @@
 name: Frontend Deploy
 
 on:
-  pull_request:
-    types: [closed]
-    branches: [ "main" ]
+  workflow_run:
+    workflows: ["Infra CDK Deploy"]
+    types: [completed]
+  workflow_dispatch: {}
 
 jobs:
   deploy:
-    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
+    # Run when triggered manually, or after Infra workflow succeeds
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -15,6 +17,7 @@ jobs:
     env:
       AWS_REGION: ${{ github.event.inputs.region || 'us-east-1' }}
       AWS_ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_TO_ASSUME }}
+      STACK_NAME: ${{ vars.STACK_NAME || 'anonchat' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,25 +40,62 @@ jobs:
       - name: Discover infra outputs
         id: cf
         run: |
-          ws_url=$(aws cloudformation describe-stacks --stack-name anonchat \
+          set -euo pipefail
+          # Check if stack exists; skip if not
+          if ! aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].StackStatus' --output text >/dev/null 2>&1; then
+            echo "stack_missing=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          ws_url=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
             --query "Stacks[0].Outputs[?OutputKey=='WebSocketUrl'].OutputValue" --output text)
-          bucket=$(aws cloudformation describe-stacks --stack-name anonchat \
+          bucket=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
             --query "Stacks[0].Outputs[?OutputKey=='WebsiteBucketName'].OutputValue" --output text)
+          dist_id=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='CloudFrontDistributionId'].OutputValue" --output text)
           echo "ws_url=$ws_url" >> $GITHUB_OUTPUT
           echo "bucket=$bucket" >> $GITHUB_OUTPUT
+          echo "dist_id=$dist_id" >> $GITHUB_OUTPUT
 
       - name: Generate config.js
+        if: ${{ steps.cf.outputs.stack_missing != 'true' }}
+        env:
+          RAW_WS_URL: ${{ steps.cf.outputs.ws_url }}
+          VAPID_PK: ${{ secrets.VAPID_PUBLIC_KEY }}
         run: |
-          echo "window.CONFIG = { wsUrl: '${{ steps.cf.outputs.ws_url }}' };" > frontend/config.js
+          set -euo pipefail
+          ws="$RAW_WS_URL"
+          suf='/$default'
+          if [[ "$ws" != *"$suf" ]]; then
+            if [[ "$ws" == */ ]]; then ws="${ws}\$default"; else ws="${ws}/\$default"; fi
+          fi
+          # Escape $ for safe shell printing
+          ws_escaped=$(printf '%s' "$ws" | sed 's/[$]/\\$/g')
+          printf "window.CONFIG = { wsUrl: '%s', vapidPublicKey: '%s' };\n" "$ws_escaped" "$VAPID_PK" > frontend/config.js
 
       - name: Sync static assets (cacheable)
+        if: ${{ steps.cf.outputs.stack_missing != 'true' }}
         run: |
           aws s3 sync frontend s3://${{ steps.cf.outputs.bucket }}/ \
             --delete \
             --exclude index.html \
+            --exclude config.js \
             --cache-control max-age=31536000,public
 
       - name: Upload index.html (no cache)
+        if: ${{ steps.cf.outputs.stack_missing != 'true' }}
         run: |
           aws s3 cp frontend/index.html s3://${{ steps.cf.outputs.bucket }}/index.html \
             --cache-control no-store
+
+      - name: Upload config.js (no cache)
+        if: ${{ steps.cf.outputs.stack_missing != 'true' }}
+        run: |
+          aws s3 cp frontend/config.js s3://${{ steps.cf.outputs.bucket }}/config.js \
+            --cache-control no-store
+
+      - name: Invalidate CloudFront (index)
+        if: ${{ steps.cf.outputs.stack_missing != 'true' && steps.cf.outputs.dist_id != '' }}
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ steps.cf.outputs.dist_id }} \
+            --paths "/" "/index.html" "/config.js" "/sw.js" "/app.js" "/styles.css" "/chat"

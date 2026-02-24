@@ -12,13 +12,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#0f172a" />
     <title>Anon Chat</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
+    <link rel="manifest" href="manifest.webmanifest">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body class="bg-slate-900 text-slate-100 min-h-screen">
-<<<<<<< Updated upstream
-    <div class="flex flex-col min-h-screen">
-=======
     <!-- Google Tag Manager (noscript) -->
     <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PDHF57KM"
     height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
@@ -143,14 +144,37 @@
       </footer>
     </section>
     <div id="appShell" hidden style="display:none" class="flex flex-col min-h-screen">
->>>>>>> Stashed changes
       <header class="sticky top-0 z-10 backdrop-blur bg-slate-900/70 border-b border-slate-800">
         <div class="max-w-4xl mx-auto flex items-center justify-between gap-4 px-4 py-3">
           <div class="flex items-center gap-2">
-            <div class="h-6 w-6 rounded bg-gradient-to-tr from-emerald-400 to-cyan-400"></div>
+            <img src="icons/chatapp_logo.png" alt="Logo" class="h-6 w-6 rounded object-cover" />
             <h1 class="font-semibold tracking-tight">Anon Chat</h1>
+            <span id="currentRoom" class="hidden ml-2 text-[11px] px-2 py-0.5 rounded-full border border-slate-700 bg-slate-800/70 text-slate-200"></span>
+            <span id="onlineCount" class="hidden ml-2 text-[11px] px-2 py-0.5 rounded-full border border-emerald-700 bg-emerald-500/10 text-emerald-200"></span>
+            <button id="btnEditAlias" class="text-[11px] px-2 py-0.5 rounded border border-slate-700 bg-slate-800/50 hover:bg-slate-800 text-slate-300">Edit</button>
           </div>
-          <div id="status" class="text-xs text-slate-400">disconnected</div>
+          <div class="flex items-center gap-3">
+            <button id="btnJoinLobby" class="inline-flex items-center gap-1 rounded bg-emerald-500/90 hover:bg-emerald-400 text-slate-900 text-xs font-semibold px-3 py-1 border border-emerald-400/20 transition">
+              Join Lobby
+            </button>
+            <button id="btnRoomSettings" class="inline-flex items-center gap-1 rounded bg-slate-800/70 hover:bg-slate-800 text-slate-200 text-xs font-semibold px-3 py-1 border border-slate-600 transition">Room</button>
+            <button id="btnUsersHdr" class="inline-flex items-center gap-1 rounded bg-slate-800/70 hover:bg-slate-800 text-slate-200 text-xs font-semibold px-3 py-1 border border-slate-600 transition">
+              Users
+            </button>
+            <button id="btnDmsHdr" class="inline-flex items-center gap-1 rounded bg-slate-800/70 hover:bg-slate-800 text-slate-200 text-xs font-semibold px-3 py-1 border border-slate-600 transition">
+              DMs
+            </button>
+            <button id="btnRoomsHdr" class="inline-flex items-center gap-1 rounded bg-slate-800/70 hover:bg-slate-800 text-slate-200 text-xs font-semibold px-3 py-1 border border-slate-600 transition">
+              Rooms
+            </button>
+            <button id="btnLogout" class="hidden inline-flex items-center gap-1 rounded bg-slate-800/70 hover:bg-slate-800 text-slate-200 text-xs font-semibold px-3 py-1 border border-slate-600 transition">
+              Logout
+            </button>
+            <div id="status" class="text-xs text-slate-400">disconnected</div>
+            <button id="btnReconnect" hidden class="inline-flex items-center gap-1 rounded bg-emerald-500/90 hover:bg-emerald-500 text-slate-900 text-xs font-semibold px-3 py-1 shadow transition">
+              Reconnect
+            </button>
+          </div>
         </div>
       </header>
 
@@ -168,8 +192,23 @@
                 <input id="alias" placeholder="anon" maxlength="32"
                   class="w-full rounded-lg bg-slate-800/80 border border-slate-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
               </label>
-              <button id="btnJoin"
-                class="rounded-lg bg-emerald-400/90 hover:bg-emerald-400 text-emerald-950 font-semibold px-4 py-2 transition">Join</button>
+              <div id="actions" class="flex gap-2">
+                <button id="btnJoin"
+                  class="inline-flex items-center gap-2 rounded-lg bg-gradient-to-tr from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-900 font-semibold px-4 py-2 shadow-md transition ring-1 ring-emerald-400/30">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+                  Join
+                </button>
+                <button id="btnCopyLink"
+                  class="inline-flex items-center gap-2 rounded-lg bg-slate-800/70 hover:bg-slate-800 text-slate-200 font-semibold px-4 py-2 border border-slate-600 transition">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                  Copy link
+                </button>
+                <button id="btnRooms"
+                  class="inline-flex items-center gap-2 rounded-lg bg-slate-800/70 hover:bg-slate-800 text-slate-200 font-semibold px-4 py-2 border border-slate-600 transition">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25A2.25 2.25 0 018.25 10.5H6A2.25 2.25 0 013.75 8.25V6zM13.5 6A2.25 2.25 0 0115.75 3.75H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25A2.25 2.25 0 0113.5 8.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25A2.25 2.25 0 0110.5 15.75V18A2.25 2.25 0 018.25 20.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 15.75A2.25 2.25 0 0115.75 13.5H18A2.25 2.25 0 0120.25 15.75V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"/></svg>
+                  Rooms
+                </button>
+              </div>
             </div>
           </div>
 
@@ -178,15 +217,274 @@
       </main>
 
       <footer id="composer" hidden class="sticky bottom-0 border-t border-slate-800 bg-slate-900/70 backdrop-blur">
-        <div class="max-w-4xl mx-auto px-4 py-3 flex gap-2">
-          <input id="input" placeholder="Type a message" maxlength="500"
-            class="flex-1 rounded-full bg-slate-800/80 border border-slate-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
-          <button id="send" class="rounded-full bg-emerald-400/90 hover:bg-emerald-400 text-emerald-950 font-semibold px-5 transition">Send</button>
+        <div class="max-w-4xl mx-auto px-4 py-3 flex flex-col gap-2">
+          <div id="dmBar" hidden class="text-xs text-amber-100 bg-amber-500/10 border border-amber-400/40 rounded px-2 py-1 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-amber-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 8h10M7 12h6m-9 8l4-4h10a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12z"/></svg>
+              <div>
+                Direct message to <span id="dmTargetLabel" class="font-semibold text-amber-200"></span>
+              </div>
+            </div>
+            <button id="btnDmClear" class="rounded bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/40 px-2 py-0.5 text-amber-100">Clear</button>
+          </div>
+          <div id="replyBar" hidden class="text-xs text-cyan-100 bg-cyan-500/10 border border-cyan-400/40 rounded px-2 py-1 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-cyan-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 10h7l-1-2m1 2l-1 2m5-2h7m-7 0l1-2m-1 2l1 2"/></svg>
+              <div>
+                Replying to <span id="replyToLabel" class="font-semibold text-cyan-200"></span>
+                <span id="replyToExcerpt" class="text-slate-300"></span>
+              </div>
+            </div>
+            <button id="btnReplyClear" class="rounded bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-400/40 px-2 py-0.5 text-cyan-100">Cancel</button>
+          </div>
+          <div class="flex gap-2">
+            <input id="input" placeholder="Type a message" maxlength="512"
+              class="flex-1 rounded-full bg-slate-800/80 border border-slate-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+            <input id="fileAttach" type="file" hidden accept="image/*" />
+            <button id="btnAttach" class="inline-flex items-center gap-2 rounded-full bg-slate-800/70 hover:bg-slate-800 text-slate-200 font-semibold px-3 py-2 border border-slate-600 transition" title="Attach image">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828L18 9.828a4 4 0 00-5.656-5.656L6.343 10.172"/></svg>
+            </button>
+            <button id="send" class="inline-flex items-center gap-2 rounded-full bg-gradient-to-tr from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-900 font-semibold px-5 py-2 shadow-md transition ring-1 ring-emerald-400/30">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 12l12-6-6 12-1.5-4.5L6 12z"/></svg>
+              Send
+            </button>
+          </div>
+          <div class="mt-1 flex gap-2 items-center">
+            <div id="attachPreview" hidden class="relative w-14 h-14 rounded-lg border border-slate-700 overflow-hidden">
+              <img id="attachPreviewImg" class="w-full h-full object-cover" alt="attachment preview" />
+              <div id="attachPreviewProg" class="absolute bottom-0 left-0 right-0 text-[10px] text-center bg-slate-900/60 text-slate-200"></div>
+              <button id="attachPreviewRemove" class="absolute -top-1 -right-1 h-5 w-5 text-[12px] rounded-full bg-slate-800/80 border border-slate-600 hover:bg-slate-700" title="Remove">×</button>
+              <button id="attachPreviewRetry" hidden class="absolute left-1 bottom-1 text-[10px] px-1 rounded border border-slate-600 bg-slate-800/70 hover:bg-slate-800" title="Retry">Retry</button>
+              <div id="attachPreviewOk" hidden class="absolute left-1 bottom-1 text-[10px] px-1 rounded border border-emerald-600 bg-emerald-500/20 text-emerald-200">OK</div>
+            </div>
+          </div>
+          <div class="flex items-center justify-between text-xs">
+            <div id="typingStatus" class="h-4 text-slate-400"></div>
+          </div>
+          <!-- Mention autocomplete dropdown -->
+          <div id="mentionBox" hidden class="fixed bottom-20 left-1/2 -translate-x-1/2 z-30 w-[95%] max-w-2xl">
+            <ul id="mentionList" class="rounded-xl border border-slate-800 bg-slate-900/95 shadow-2xl text-sm divide-y divide-slate-800"></ul>
+          </div>
         </div>
       </footer>
+      <!-- New messages badge -->
+      <button id="newMsgBadge" hidden class="fixed right-4 bottom-24 z-30 rounded-full bg-emerald-500/90 hover:bg-emerald-400 text-slate-900 text-xs font-semibold px-3 py-1 shadow ring-1 ring-emerald-400/30">New messages</button>
     </div>
 
-    <script src="config.js"></script>
-    <script src="app.js"></script>
+    <!-- Rooms Panel -->
+    <div id="roomsPanel" hidden class="fixed right-4 top-16 z-20 w-72 rounded-xl border border-slate-800 bg-slate-900/95 shadow-2xl p-3">
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-sm text-slate-400">Active Rooms</div>
+        <div class="flex gap-2">
+          <button id="btnRoomsRefresh" class="text-xs rounded bg-slate-800/80 hover:bg-slate-800 border border-slate-700 px-2 py-1">Refresh</button>
+          <button id="btnRoomsClose" class="text-xs rounded bg-slate-800/80 hover:bg-slate-800 border border-slate-700 px-2 py-1">Close</button>
+        </div>
+      </div>
+      <ul id="roomsList" class="text-sm divide-y divide-slate-800"></ul>
+    </div>
+    <div id="usersPanel" hidden class="fixed right-4 top-16 z-20 w-64 rounded-xl border border-slate-800 bg-slate-900/95 shadow-2xl p-3">
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-sm text-slate-400">Users</div>
+        <div class="flex gap-2">
+          <button id="btnUsersRefresh" class="text-xs rounded bg-slate-800/80 hover:bg-slate-800 border border-slate-700 px-2 py-1">Refresh</button>
+          <button id="btnUsersClose" class="text-xs rounded bg-slate-800/80 hover:bg-slate-800 border border-slate-700 px-2 py-1">Close</button>
+        </div>
+      </div>
+      <ul id="usersList" class="text-sm divide-y divide-slate-800"></ul>
+    </div>
+    
+    <!-- DMs Inbox Panel -->
+    <div id="dmsPanel" hidden class="fixed right-4 top-16 z-20 w-64 rounded-xl border border-slate-800 bg-slate-900/95 shadow-2xl p-3">
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-sm text-slate-400">Direct Messages</div>
+        <div class="flex gap-2">
+          <button id="btnDmsClose" class="text-xs rounded bg-slate-800/80 hover:bg-slate-800 border border-slate-700 px-2 py-1">Close</button>
+        </div>
+      </div>
+      <ul id="dmsList" class="text-sm divide-y divide-slate-800"></ul>
+    </div>
+
+    <!-- DM Thread Panel -->
+    <div id="dmThreadPanel" hidden class="fixed left-1/2 -translate-x-1/2 top-16 bottom-24 z-20 w-[95%] max-w-2xl rounded-xl border border-slate-800 bg-slate-900/95 shadow-2xl p-3 flex flex-col">
+      <div class="flex items-center justify-between mb-2 gap-2">
+        <div class="flex items-center gap-2">
+          <button id="btnDmThreadBack" class="text-xs rounded bg-slate-800/80 hover:bg-slate-800 border border-slate-700 px-2 py-1">Back</button>
+          <div class="text-sm text-slate-400">DM with <span id="dmThreadTitle" class="text-slate-200 font-semibold"></span></div>
+        </div>
+        <div class="flex items-center gap-2">
+          <select id="dmThreadSelect" class="text-xs rounded bg-slate-800/80 border border-slate-700 px-2 py-1 text-slate-200"></select>
+          <button id="btnDmSetKey" class="text-[11px] rounded bg-slate-800/80 hover:bg-slate-800 border border-slate-700 px-2 py-1">Encrypt</button>
+          <button id="btnDmThreadClose" class="text-xs rounded bg-slate-800/80 hover:bg-slate-800 border border-slate-700 px-2 py-1">Close</button>
+        </div>
+      </div>
+      <ul id="dmThreadList" class="flex-1 overflow-y-auto text-sm divide-y divide-slate-800"></ul>
+      <div class="mt-2 text-xs text-slate-400 h-4" id="dmTypingStatus"></div>
+      <div class="mt-1 flex gap-2 items-center">
+        <div id="dmAttachPreview" hidden class="relative w-14 h-14 rounded-lg border border-slate-700 overflow-hidden">
+          <img id="dmAttachPreviewImg" class="w-full h-full object-cover" alt="attachment preview" />
+          <div id="dmAttachPreviewProg" class="absolute bottom-0 left-0 right-0 text-[10px] text-center bg-slate-900/60 text-slate-200"></div>
+          <button id="dmAttachPreviewRemove" class="absolute -top-1 -right-1 h-5 w-5 text-[12px] rounded-full bg-slate-800/80 border border-slate-600 hover:bg-slate-700" title="Remove">×</button>
+          <button id="dmAttachPreviewRetry" hidden class="absolute left-1 bottom-1 text-[10px] px-1 rounded border border-slate-600 bg-slate-800/70 hover:bg-slate-800" title="Retry">Retry</button>
+          <div id="dmAttachPreviewOk" hidden class="absolute left-1 bottom-1 text-[10px] px-1 rounded border border-emerald-600 bg-emerald-500/20 text-emerald-200">OK</div>
+        </div>
+      </div>
+      <div class="mt-2 flex gap-2 items-center">
+        <input id="dmInput" placeholder="Type a direct message" maxlength="512"
+          class="flex-1 rounded-full bg-slate-800/80 border border-slate-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+        <input id="dmFileAttach" type="file" hidden accept="image/*" />
+        <button id="btnDmAttach" class="inline-flex items-center gap-2 rounded-full bg-slate-800/70 hover:bg-slate-800 text-slate-200 font-semibold px-3 py-2 border border-slate-600 transition" title="Attach image">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828L18 9.828a4 4 0 00-5.656-5.656L6.343 10.172"/></svg>
+        </button>
+        <button id="btnDmSend" class="inline-flex items-center gap-2 rounded-full bg-gradient-to-tr from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-900 font-semibold px-5 py-2 shadow-md transition ring-1 ring-emerald-400/30">Send</button>
+      </div>
+    </div>
+
+    <!-- DM Secret Modal -->
+    <div id="dmKeyOverlay" hidden style="display:none" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50">
+      <div class="w-[92%] max-w-sm rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-5 relative">
+        <button id="btnDmKeyClose" class="absolute right-2 top-2 text-slate-400 hover:text-slate-200" title="Close" aria-label="Close">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+        <h3 class="text-lg font-semibold mb-2">Set DM Secret</h3>
+        <p class="text-sm text-slate-300 mb-3">Enter a shared secret with <span id="dmKeyPartner" class="font-semibold"></span>. Both sides must enter the same secret to read encrypted DMs.</p>
+        <input id="dmKeyInput" type="password" placeholder="Shared secret" maxlength="128" class="w-full rounded-lg bg-slate-800/80 border border-slate-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400 mb-3" />
+        <div class="flex justify-end gap-2">
+          <button id="btnDmKeyCancel" class="rounded bg-slate-800/70 hover:bg-slate-800 text-slate-200 text-sm font-semibold px-3 py-1 border border-slate-600">Cancel</button>
+          <button id="btnDmKeySave" class="rounded bg-emerald-500/90 hover:bg-emerald-500 text-slate-900 text-sm font-semibold px-3 py-1 border border-emerald-400/30">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Login Overlay -->
+    <div id="loginOverlay" hidden style="display:none" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50">
+      <div class="w-[92%] max-w-md rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-6 relative">
+        <button id="btnLoginClose" class="absolute right-2 top-2 text-slate-400 hover:text-slate-200" title="Close" aria-label="Close">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+        <div class="mb-4 flex items-center gap-2">
+          <img src="icons/chatapp_logo.png" alt="Logo" class="h-7 w-7 rounded object-cover" />
+          <div class="font-semibold">Join Anon Chat</div>
+        </div>
+        <div class="grid grid-cols-1 gap-3">
+          <label class="text-sm">
+            <div class="mb-1 text-slate-400">Room</div>
+            <input id="loginRoom" placeholder="lobby" maxlength="64"
+              class="w-full rounded-lg bg-slate-800/80 border border-slate-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+          </label>
+          <label class="text-sm">
+            <div class="mb-1 text-slate-400">Alias</div>
+            <input id="loginAlias" placeholder="anon" maxlength="32"
+              class="w-full rounded-lg bg-slate-800/80 border border-slate-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+          </label>
+          <div class="grid grid-cols-1 items-start gap-2 text-sm">
+            <label class="flex items-center gap-2 text-xs text-slate-400">
+              <input id="loginPrivate" type="checkbox" class="accent-emerald-500" /> Private room (require code)
+            </label>
+            <label class="text-sm">
+              <div class="mb-1 text-slate-400">Code</div>
+              <input id="loginCode" placeholder="6-12 chars" maxlength="32" disabled
+                class="w-full rounded-lg bg-slate-800/50 border border-slate-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+            </label>
+            <div class="grid grid-cols-2 gap-2">
+              <button id="btnGenCode" disabled
+                class="w-full text-center rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-200 font-semibold px-3 py-2 border border-slate-700 transition">Generate</button>
+              <button id="btnCopyCode" disabled
+                class="w-full text-center rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-200 font-semibold px-3 py-2 border border-slate-700 transition">Copy</button>
+            </div>
+          </div>
+          <label class="flex items-center gap-2 text-xs text-slate-400">
+            <input id="rememberSession" type="checkbox" class="accent-emerald-500" /> Remember for this browser
+          </label>
+          <div id="loginError" class="text-xs text-rose-400 h-4"></div>
+          <button id="btnLogin"
+            class="mt-1 inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-tr from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-900 font-semibold px-4 py-2 shadow-md transition ring-1 ring-emerald-400/30">
+            Login
+          </button>
+          <button id="btnLoginLobby"
+            class="mt-2 inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-500/90 hover:bg-emerald-400 text-slate-900 font-semibold px-4 py-2 shadow-md transition ring-1 ring-emerald-400/30">
+            Quick Join Lobby
+          </button>
+        </div>
+        <!-- Loading overlay inside modal -->
+        <div id="loginLoading" hidden style="display:none" class="absolute inset-0 rounded-2xl bg-slate-900/80 flex flex-col items-center justify-center gap-3">
+          <div class="h-10 w-10 rounded-full border-2 border-emerald-400/60 border-t-transparent animate-spin"></div>
+          <div class="text-emerald-300 font-medium">Connecting…</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Edit Alias Overlay -->
+    <div id="aliasOverlay" hidden style="display:none" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50">
+      <div class="w-[92%] max-w-md rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-6">
+        <div class="mb-4 flex items-center gap-2">
+          <div class="h-7 w-7 rounded bg-gradient-to-tr from-emerald-400 to-cyan-400"></div>
+          <div class="font-semibold">Edit Alias</div>
+        </div>
+        <div class="grid grid-cols-1 gap-3">
+          <label class="text-sm">
+            <div class="mb-1 text-slate-400">Alias</div>
+            <input id="newAliasInput" placeholder="anon" maxlength="32"
+              class="w-full rounded-lg bg-slate-800/80 border border-slate-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+          </label>
+          <div id="aliasError" class="text-xs text-rose-400 h-4"></div>
+          <div class="flex gap-2 justify-end">
+            <button id="btnAliasCancel"
+              class="rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-200 font-semibold px-3 py-2 border border-slate-700 transition">Cancel</button>
+            <button id="btnAliasSave"
+              class="rounded-lg bg-gradient-to-tr from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-900 font-semibold px-3 py-2 shadow-md transition ring-1 ring-emerald-400/30">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Room Settings Overlay -->
+    <div id="roomSettingsOverlay" hidden style="display:none" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50">
+      <div class="w-[92%] max-w-md rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-6">
+        <div class="mb-4 flex items-center gap-2">
+          <div class="h-7 w-7 rounded bg-gradient-to-tr from-emerald-400 to-cyan-400"></div>
+          <div class="font-semibold">Room Settings</div>
+        </div>
+        <div class="grid grid-cols-1 gap-3">
+          <label class="text-sm">
+            <div class="mb-1 text-slate-400">Rotate Private Code</div>
+            <div class="flex gap-2">
+              <input id="roomNewCode" placeholder="6-12 chars" maxlength="32"
+                class="flex-1 rounded-lg bg-slate-800/80 border border-slate-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+              <button id="btnRotateCode" class="rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-200 font-semibold px-3 py-2 border border-slate-700 transition">Set</button>
+            </div>
+          </label>
+          <div class="flex gap-2 justify-end">
+            <button id="btnRoomSettingsClose"
+              class="rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-200 font-semibold px-3 py-2 border border-slate-700 transition">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Room Code Overlay (enter code when joining private room) -->
+    <div id="roomCodeOverlay" hidden style="display:none" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50">
+      <div class="w-[92%] max-w-sm rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-6">
+        <div class="mb-4 flex items-center gap-2">
+          <div class="h-6 w-6 rounded bg-gradient-to-tr from-emerald-400 to-cyan-400"></div>
+          <div class="font-semibold">Enter Room Code</div>
+        </div>
+        <div class="grid grid-cols-1 gap-3">
+          <label class="text-sm">
+            <div class="mb-1 text-slate-400">Code</div>
+            <input id="roomJoinCodeInput" placeholder="6-12 chars" maxlength="32"
+              class="w-full rounded-lg bg-slate-800/80 border border-slate-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+          </label>
+          <div id="roomJoinCodeError" class="text-xs text-rose-400 h-4"></div>
+          <div class="flex gap-2 justify-end">
+            <button id="btnRoomCodeCancel"
+              class="rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-200 font-semibold px-3 py-2 border border-slate-700 transition">Cancel</button>
+            <button id="btnRoomCodeJoin"
+              class="rounded-lg bg-gradient-to-tr from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-900 font-semibold px-3 py-2 shadow-md transition ring-1 ring-emerald-400/30">Join</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="config.js?v=4"></script>
+    <script src="app.js?v=4"></script>
   </body>
   </html>

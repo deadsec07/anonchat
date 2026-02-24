@@ -1,13 +1,12 @@
 name: Infra CDK Deploy
 
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches: [ "main" ]
+  workflow_dispatch: {}
 
 jobs:
   deploy:
-    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -15,6 +14,10 @@ jobs:
     env:
       AWS_REGION: ${{ github.event.inputs.region || 'us-east-1' }}
       AWS_ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_TO_ASSUME }}
+      VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+      VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+      VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT || 'mailto:you@example.com' }}
+      STACK_NAME: ${{ vars.STACK_NAME || 'anonchat' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,13 +45,18 @@ jobs:
       - name: Install CDK and deps
         working-directory: infra-cdk
         run: |
-          npm ci
+          if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
           npx cdk --version
 
       - name: CDK Bootstrap (safe to repeat)
         working-directory: infra-cdk
         run: |
           npx cdk bootstrap || true
+
+      - name: Install backend Lambda deps (aws-sdk)
+        working-directory: backend/src
+        run: |
+          npm install --no-audit --no-fund
 
       - name: Synth
         working-directory: infra-cdk
@@ -57,3 +65,93 @@ jobs:
       - name: Deploy
         working-directory: infra-cdk
         run: npx cdk deploy --require-approval never
+
+  frontend:
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_REGION: ${{ github.event.inputs.region || 'us-east-1' }}
+      AWS_ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_TO_ASSUME }}
+      STACK_NAME: ${{ vars.STACK_NAME || 'anonchat' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC Assume Role)
+        if: ${{ env.AWS_ROLE_TO_ASSUME != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS credentials (Access Keys)
+        if: ${{ env.AWS_ROLE_TO_ASSUME == '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Discover infra outputs
+        id: cf
+        run: |
+          set -euo pipefail
+          if ! aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].StackStatus' --output text >/dev/null 2>&1; then
+            echo "stack_missing=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          ws_url=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='WebSocketUrl'].OutputValue" --output text)
+          bucket=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='WebsiteBucketName'].OutputValue" --output text)
+          dist_id=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='CloudFrontDistributionId'].OutputValue" --output text)
+          echo "ws_url=$ws_url" >> $GITHUB_OUTPUT
+          echo "bucket=$bucket" >> $GITHUB_OUTPUT
+          echo "dist_id=$dist_id" >> $GITHUB_OUTPUT
+
+      - name: Generate config.js
+        if: ${{ steps.cf.outputs.stack_missing != 'true' }}
+        env:
+          RAW_WS_URL: ${{ steps.cf.outputs.ws_url }}
+          VAPID_PK: ${{ secrets.VAPID_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          ws="$RAW_WS_URL"
+          suf='/$default'
+          if [[ "$ws" != *"$suf" ]]; then
+            if [[ "$ws" == */ ]]; then ws="${ws}\$default"; else ws="${ws}/\$default"; fi
+          fi
+          ws_escaped=$(printf '%s' "$ws" | sed 's/[$]/\\$/g')
+          printf "window.CONFIG = { wsUrl: '%s', vapidPublicKey: '%s' };\n" "$ws_escaped" "$VAPID_PK" > frontend/config.js
+
+      - name: Sync static assets (cacheable)
+        if: ${{ steps.cf.outputs.stack_missing != 'true' }}
+        run: |
+          aws s3 sync frontend s3://${{ steps.cf.outputs.bucket }}/ \
+            --delete \
+            --exclude index.html \
+            --exclude config.js \
+            --cache-control max-age=31536000,public
+
+      - name: Upload index.html (no cache)
+        if: ${{ steps.cf.outputs.stack_missing != 'true' }}
+        run: |
+          aws s3 cp frontend/index.html s3://${{ steps.cf.outputs.bucket }}/index.html \
+            --cache-control no-store
+
+      - name: Upload config.js (no cache)
+        if: ${{ steps.cf.outputs.stack_missing != 'true' }}
+        run: |
+          aws s3 cp frontend/config.js s3://${{ steps.cf.outputs.bucket }}/config.js \
+            --cache-control no-store
+
+      - name: Invalidate CloudFront (index)
+        if: ${{ steps.cf.outputs.stack_missing != 'true' && steps.cf.outputs.dist_id != '' }}
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ steps.cf.outputs.dist_id }} \
+            --paths "/" "/index.html" "/config.js" "/sw.js" "/app.js" "/styles.css" "/chat"

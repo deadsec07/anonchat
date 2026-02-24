@@ -57,6 +57,8 @@ Keep messages ephemeral and prune aggressively to keep storage low. Avoid consta
 - Copy `frontend/config.example.js` → `frontend/config.js` and set `wsUrl`:
   - After deploy: `wss://<api-id>.execute-api.<region>.amazonaws.com/$default`
   - Local dev (optional local WS): `ws://localhost:3001`
+  - Local ws backend: `kill -9 $(lsof -ti:3001) 2>/dev/null && node ws-dev-server.js`
+  - Local frontend: `kill -9 $(lsof -ti:5173) 2>/dev/null && python3 -m http.server -d frontend 5173`
 
 2) Local development (no AWS)
 
@@ -116,6 +118,13 @@ aws s3 cp frontend/index.html s3://<WebsiteBucketName>/index.html --cache-contro
 
 - This stack stores minimal state to keep costs low. Additions like persistence or moderation can be layered on with care.
 - If you need LocalStack integration for WebSockets, note that community edition may not emulate API Gateway WebSocket; the provided local WS server is recommended for UI iteration.
+
+### Cost guardrails implemented
+
+- Lambda reserved concurrency capped at 10 per function to prevent runaway costs.
+- CloudWatch Logs retention set to 1 week for all Lambdas.
+- Basic per-connection rate limiting (30 msgs/min) with polite client notice.
+- Presence count broadcast on join/leave; frontend shows online count.
 
 ## GitHub Actions
 
