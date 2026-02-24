@@ -57,6 +57,8 @@ Keep messages ephemeral and prune aggressively to keep storage low. Avoid consta
 - Copy `frontend/config.example.js` → `frontend/config.js` and set `wsUrl`:
   - After deploy: `wss://<api-id>.execute-api.<region>.amazonaws.com/$default`
   - Local dev (optional local WS): `ws://localhost:3001`
+  - Local ws backend: `kill -9 $(lsof -ti:3001) 2>/dev/null && node ws-dev-server.js`
+  - Local frontend: `kill -9 $(lsof -ti:5173) 2>/dev/null && python3 -m http.server -d frontend 5173`
 
 2) Local development (no AWS)
 
