@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+# Disallow crawl of build artifacts (none by default)
+
+Sitemap: https://anonchat.hnetechnogies.com/sitemap.xml
+
