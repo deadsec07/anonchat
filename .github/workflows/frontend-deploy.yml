@@ -79,6 +79,8 @@ jobs:
             --delete \
             --exclude index.html \
             --exclude config.js \
+            --exclude robots.txt \
+            --exclude sitemap.xml \
             --cache-control max-age=31536000,public
 
       - name: Upload index.html (no cache)
@@ -93,9 +95,21 @@ jobs:
           aws s3 cp frontend/config.js s3://${{ steps.cf.outputs.bucket }}/config.js \
             --cache-control no-store
 
+      - name: Upload robots.txt (no cache)
+        if: ${{ steps.cf.outputs.stack_missing != 'true' }}
+        run: |
+          aws s3 cp frontend/robots.txt s3://${{ steps.cf.outputs.bucket }}/robots.txt \
+            --cache-control no-store
+
+      - name: Upload sitemap.xml (no cache)
+        if: ${{ steps.cf.outputs.stack_missing != 'true' }}
+        run: |
+          aws s3 cp frontend/sitemap.xml s3://${{ steps.cf.outputs.bucket }}/sitemap.xml \
+            --cache-control no-store
+
       - name: Invalidate CloudFront (index)
         if: ${{ steps.cf.outputs.stack_missing != 'true' && steps.cf.outputs.dist_id != '' }}
         run: |
           aws cloudfront create-invalidation \
             --distribution-id ${{ steps.cf.outputs.dist_id }} \
-            --paths "/" "/index.html" "/config.js" "/sw.js" "/app.js" "/styles.css" "/chat"
+            --paths "/" "/index.html" "/config.js" "/sw.js" "/app.js" "/styles.css" "/chat" "/robots.txt" "/sitemap.xml"
